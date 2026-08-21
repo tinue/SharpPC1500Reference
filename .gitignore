@@ -1,0 +1,4 @@
+*.bin
+*.lst
+.DS_Store
+/.idea/
