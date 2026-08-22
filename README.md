@@ -68,6 +68,7 @@ Documents that were **moved** here leave a one-line stub at their old location p
 | `PC-1600-Memory-Bank-Switching.md` | Full PC-1600 memory-extension and bank-switching analysis, sourced from the service manual and Systemhandbuch. |
 | `Expansion-Connectors.md` | Consolidated 40-pin connector reference: PC-1500, the PC-1500A's pin reassignment (and how far a fixed-wiring module can be pushed against it), and the PC-1600's 60-pin system bus and two memory-slot connectors. |
 | `PC-1600-Memory-Architecture.md` | PC-1600 bank switching and decoding narrative: the Z-80's 8-bank view, internal-RAM/`NEW`-offset layout, and how the same physical memory looks from the LH5803 in PC-1500-compatibility mode — with a direct comparison to the real PC-1500/1500A. |
+| `Software-Defined-Memory-Extension.md` | Hypothetical: what a microcontroller-based universal module would need to do on the wire to emulate every real PC-1500/1500A/1600 memory module (plus a few "maxed out" hypotheticals) — an enable-condition/bank-select reference table per module, with the four 40-pin slot layouts underneath. |
 
 ### Assembly-Programming/
 
