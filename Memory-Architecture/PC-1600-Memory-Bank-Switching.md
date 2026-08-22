@@ -152,6 +152,29 @@ This is why firmware can't detect or drive it the way it does a CE-1601M-class m
 
 So this isn't firmware declining to exploit a capability that's present -- the CE-163 was never built to implement Sharp's vertical-bank protocol, and the property letting it work at all in Slot 2 is a side effect of Z-80 I/O-address encoding that has nothing to do with Port 28H's actual, documented semantics. Auto-detection and OS-managed banking are only possible for devices that declare themselves the way Sharp's own module family (CE-1600M, CE-1601M, and modern work-alikes like *superRAM*) does.
 
+### Why Slot 1 and Slot 2 contribute so differently to BASIC main memory (`MEM`)
+
+A frequent point of confusion, worth stating explicitly: **a large Slot 2 module (128KB, 256KB, 512KB -- any size) can never contribute more than 32KB to `MEM`, while a Slot 1 module of the same physical size contributes its full capacity automatically.** This isn't a quirk of any specific module -- it follows directly from the bank table above.
+
+- **Slot 1's RAM sits at Bank 0's 8000-BFFF quadrant (Slot 1a)** -- the *same* global Bank 0 that houses the fixed internal RAM at C000-FFFF. Bank 0 is the default/reset-state bank for both pages, and `BFFF`+1 = `C000`, so a Slot 1 module and internal RAM are automatically one contiguous span with **zero configuration** -- no `INIT`, no bank-switching. This matches the CE-1600M's own documented Slot 1 figure exactly: *"When in Slot 1: Bank 0 and Bank 1 accessible. User area: up to 44,612 bytes"* -- no `INIT` step mentioned, because none is needed. Its ceiling here is Slot 1's own native two-bank capacity (Bank 0 + Bank 1 at 8000-BFFF, 32KB) -- there's no "Slot 1c/1d" in the architecture, so 32KB is the natural cap regardless of what a larger Slot 1 module might otherwise support.
+- **Slot 2's RAM sits at Bank 2/Bank 3 -- a different global bank, never selected by default.** None of it is BASIC-addressable until software explicitly repoints page 2's bank register there via `INIT "S2:","M"` or `"P"` (the `S0:` expansion mechanism, Part 5 of `PC-1600-Memory-Architecture.md`). Left un-`INIT`'d this way, a Slot 2 module is only ever a RAM disk. And even once configured, the ceiling is exactly **one vertical bank (32KB)** -- per the rule already established above (*"only vertical bank 0 can be configured as main memory expansion (S0)"*), independent of the module's actual physical capacity. The rest is reachable only through the file system, one vertical bank at a time via `OUT 28H`, never as live program/array memory -- the OS's ordinary bank management drives page 2's register alone and never holds Port 28H at a particular value outside a transient file access (Part 2 above).
+
+**Worked confirmation:** a real test -- a 128KB Slot 2 module (RAM-disk only, as expected) plus a CE-155 (8KB) in Slot 1 -- reported `MEM` = 52794 after `NEW`, matching the Sharp-documented CE-1600M+CE-159 combo figure exactly. The model predicts this precisely: raw total 16384 (internal) + 8192 (Slot 1) + 32768 (Slot 2, one vertical bank) = 57344, minus the fixed 4550-byte overhead confirmed in `PC-1600-Memory-Architecture.md` §3 (header + reserve + work area + a ~257-byte fixed system-variable table not itemized in the TRM's simplified diagram) = **52794**, exact. The two additions are independent and simply stack; Slot 1 isn't "unlocking" more of Slot 2 -- it's contributing its own, architecturally uncapped share through a completely different, automatic path.
+
+### The theoretical maximum: ~77KB, not 64KB
+
+Since both slots' contributions are independently capped (Slot 1 at 32KB -- Bank 0 + Bank 1 are the only two global banks ever assigned there; Slot 2 at 32KB -- one vertical bank, regardless of physical module size) and add on top of the fixed 16KB internal RAM, the ceiling is:
+
+```
+16384 (internal) + 32768 (Slot 1, capped) + 32768 (Slot 2, capped at one vertical bank)
+= 81920 raw bytes - 4550 fixed overhead (confirmed exactly across three configurations, PC-1600-Memory-Architecture.md §3)
+= 77370 bytes theoretical
+```
+
+This exceeds the Z-80's own 64KB address space because `MEM` counts total storage reachable via the OS's transparent bank-switching (already evidenced by the Slot-1 32KB and Slot-2 `S0:` 32KB examples above individually, and by the 16KB+16KB and 8KB+32KB real-hardware tests both landing exactly on the 4550-overhead model), not bytes simultaneously visible in the address space at one instant.
+
+**Close to confirmed on real hardware, not just arithmetic:** the *superRAM* manual's own screenshots (Part 7b) show almost exactly this configuration -- a 32KB `S0:` expansion from Slot 2 plus a 32KB module in Slot 1 -- reporting **`MEM` = 77114**, about 256 bytes under the now-precise 77370 prediction. Unlike the two exact matches above, this gap isn't fully reconciled -- possibly a small additional reserve specific to the *superRAM* module's own firmware/header, distinct from a plain CE-1600M's. Either way, a module larger than 32KB in either slot adds nothing further to `MEM` -- the excess is permanently RAM-disk-only. The one piece of genuinely untapped headroom: Bank 7 is documented ("addressable but unused," confirmed independently by both the TRM and the PC-1600's German user manual) but nothing -- no Sharp module, no known modern one -- has ever been built to use it; if one existed, it could in principle add up to another 16KB (a single bank, not a full slot-pair) to this ceiling, but this is speculative, not an achieved figure.
+
 ---
 
 ## Part 3: Gate Array LR38041 -- The Memory Management Hub
