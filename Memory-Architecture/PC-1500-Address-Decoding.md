@@ -74,7 +74,7 @@ The PC-1500A simply populates four of the eight possible 2KB blocks (S0, S1, S2,
 
 ### 3.1 What changed
 
-The PC-1500 exposes its expansion bus on a 40-pin edge connector (confirmed by physical pin count on a real PC-1500A). Four pins carry different signals depending on the model:
+The PC-1500 exposes its expansion bus on a 40-pin edge connector (confirmed by physical pin count on a real PC-1500A; full 40-pin table, plus the PC-1600's slot connectors, in `Expansion-Connectors.md`). Four pins carry different signals depending on the model:
 
 | Pin | PC-1500 signal | PC-1500A signal |
 |---|---|---|

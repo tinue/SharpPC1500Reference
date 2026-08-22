@@ -41,30 +41,9 @@ These are among the CPU control instructions, alongside `SDP`/`RDP` (LCD on/off)
 
 ## 3. The 40-Pin Expansion Connector
 
-The PC-1500 exposes the expansion bus on a 40-pin edge connector on the rear (confirmed by physical pin count on real hardware). PU and PV appear directly on this connector as output signals from the CPU.
+The PC-1500 exposes the expansion bus on a 40-pin edge connector on the rear (confirmed by physical pin count on real hardware). PU and PV appear directly on this connector, at pins 2 and 3, as output signals from the CPU.
 
-| Pin | Signal | Description |
-|-----|--------|-------------|
-| 1 | VCC | Power |
-| 2 | **PV** | CPU flipflop output (chip select function) |
-| 3 | **PU** | CPU flipflop output (chip select function) |
-| 4 | YO | Address &0000–&3FFF chip select |
-| 5 | S4 | Address &6000–&67FF select (may be NC depending on production month) |
-| 6 | DME0 | Chip select with WAIT condition (ME0 area) |
-| 7–14 | D7–D0 | Data bus |
-| 15 | INHIBIT | Prohibits ROM select when connected to GND |
-| 16 | S1 | Address &4800–&4FFF select |
-| 17 | S2 | Address &5000–&57FF select |
-| 18 | S3 | Address &5800–&5FFF select |
-| 19 | Y2 | Address &8000–&BFFF select |
-| 20 | VGG | Negative supply |
-| 21 | GND | Ground |
-| 22–37 | AD15–AD0 | Address bus (16 bits) |
-| 38 | OD | Output disable |
-| 39 | R/W | Memory read/write |
-| 40 | GND | Ground |
-
-*Source: Sharp PC-1500 Technical Reference Manual, section 4-3-1. This table lists the PC-1500 pinout; see `PC-1500-Address-Decoding.md` §3 for the four pins (5, 16, 17, 18) that carry different signals on the PC-1500A.*
+For the full 40-pin table (and the PC-1500A's pin reassignment, and the PC-1600's CN-7/CN-8 slot connectors), see `Expansion-Connectors.md`.
 
 PV and PU appear at pins 2 and 3, described in the TRM as "chip select" signals — modules can use them as additional gating inputs for chip-select logic, alongside their role as CPU flipflop outputs. YO (pin 4) is the primary chip select for the &0000–&3FFF module RAM region. There is no dedicated bank-select address register on the connector for that region — the PU and PV pins are the only CPU-flipflop mechanism for communicating a state change to a module beyond the address and data buses.
 

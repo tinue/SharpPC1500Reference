@@ -66,6 +66,7 @@ Documents that were **moved** here leave a one-line stub at their old location p
 | `PC-1500-Bank-Switching.md` | How 16KB memory-expansion modules bank-switch into the PC-1500/1500A's low 16KB address window, built on top of `PC-1500-Address-Decoding.md`; also touches PC-1600 compatibility. |
 | `PU-PV-Signals.md` | PU/PV flip-flop pins on the LH5801 and their role in the PC-1500/1500A expansion connector. |
 | `PC-1600-Memory-Bank-Switching.md` | Full PC-1600 memory-extension and bank-switching analysis, sourced from the service manual and Systemhandbuch. |
+| `Expansion-Connectors.md` | Consolidated 40-pin connector reference: PC-1500, the PC-1500A's pin reassignment (and how far a fixed-wiring module can be pushed against it), and the PC-1600's CN-7/CN-8 slot connectors. |
 
 ### Assembly-Programming/
 

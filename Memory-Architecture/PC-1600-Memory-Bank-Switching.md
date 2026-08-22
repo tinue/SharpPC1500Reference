@@ -133,9 +133,11 @@ Additional banks in 8000-BFFF:
 - Cannot be read via IN instruction; readable from system address F07DH
 - Bits D0-D2 written here are latched by the gate array into outputs A14A-A16A, providing extra address lines for sub-banking the CS24 ROM space (Bank 3, 4000-7FFF) into two 8KB halves
 
-**Port 28H (Slot 2 sub-banking):**
-- Further subdivides Slot 2 (8000-BFFF, Banks 2+3) for modules larger than 32KB
-- This is the key port for using large memory modules in Slot 2
+**Port 28H (Slot 2 sub-banking) -- "vertical bank" select:**
+- Write-only, `OUT (28H),A` in Z-80 assembler. Confirmed by two independent sources now: the CE-1601M Service Manual's memory-map figure (*"The vertical bank of S2 is selected when data of 0 to 7 are written in 28H of the I/O space"* -- an OCR-garbled scan renders this "0 to 9", but is settled by the second source), and the *superRAM* modern-module manual (§8, "Memory Map"), which states outright: *"in 256KB Mode it takes values between 0 and 7 (8 vertical banks 32KB each result in 256KB). So in 512KB Mode it takes values between 0 and 15."* Confirmed: **0-7**, 8 vertical banks.
+- This is a **second, independent bank-select axis for Slot 2's 8000-BFFF window**, orthogonal to Port 31H's b4-b6 field (Part 2 above). Port 31H's field selects among the *global* 8 banks for the whole 8000-BFFF page, of which only Bank 2 and Bank 3 physically route to Slot 2 (RAM1) at all -- call this the "horizontal" axis (2 usable positions for Slot 2, 16KB each = 32KB reachable per module without touching Port 28H). Port 28H then multiplexes *within* whatever module sits in Slot 2, selecting one of up to 8 "vertical banks" -- each vertical bank being a distinct 32KB unit occupying that same Bank-2/Bank-3 footprint. Confirmed against the CE-1601M's own chip layout (a 64KB module built from two 32Kx8 SRAM chips occupies exactly *two* vertical banks, 0 and 1) and, independently, against the *superRAM*'s own memory map (Part 7b): 8 vertical banks x 32KB = **256KB, the officially-supported ceiling for Slot 2**.
+- **Only vertical bank 0 is usable as directly-addressable program or expansion memory** (i.e. through ordinary `BANKSET`/Port 31H access); vertical banks 1-7 are reachable only through the file system (RAM-disk), because the OS's program/expansion-memory bank management drives Port 31H alone and has no notion of also holding Port 28H at a particular value -- only the file-system driver issues explicit `OUT 28H` writes per access. Stated directly by both the CE-1601M manual and the *superRAM* manual (§8: *"only vertical bank 0 can be configured as main memory expansion (S0)"*). This is also why Mode A-D of the CE-1601M (Part 7a) always reserves at least 32KB -- vertical bank 0 -- for program/expansion use, with any additional 32KB blocks (vertical banks 1+) usable only as a RAM file.
+- **The 512KB figure is now directly confirmed, not just plausible**, by a real product: the *superRAM* module (Part 7b) uses vertical-bank values 8-15 for its 512KB mode, on the exact same Port 28H mechanism -- the PC-1600's own firmware `INIT` command simply never generates or validates values above 7, since Sharp never shipped a module needing them; a small patch routine (loaded and `CALL`ed, not a ROM modification) is sufficient to retarget the file-system header/capacity fields to the wider range. Nothing about Port 28H itself, or the Z-80 I/O space, imposes an 8-bank ceiling -- that was purely a consequence of Sharp's own modules never using more than a 3-bit vertical-bank field.
 
 ---
 
@@ -208,40 +210,7 @@ Generated internally by the SC7852 custom CPU, based on bank selection register 
 
 ## Part 5: Expansion Slot Connectors
 
-### CN-7 (Slot 1 / S1) -- 40 pins
-
-| Pin | Signal | Pin | Signal | Pin | Signal | Pin | Signal |
-|-----|--------|-----|--------|-----|--------|-----|--------|
-| 1 | VCC | 11 | D3 | 21 | NC | 31 | A6 |
-| 2 | PVIN | 12 | D2 | 22 | A15 | 32 | A5 |
-| 3 | PU | 13 | D1 | 23 | A14 | 33 | A4 |
-| 4 | **RAM2** | 14 | D0 | 24 | A13 | 34 | A3 |
-| 5 | PVOUT | 15 | INH | 25 | A12 | 35 | A2 |
-| 6 | MREQ | 16 | S1 | 26 | A11 | 36 | A1 |
-| 7 | D7 | 17 | S2 | 27 | A10 | 37 | A0 |
-| 8 | D6 | 18 | S3 | 28 | A9 | 38 | RD |
-| 9 | D5 | 19 | PT | 29 | A8 | 39 | WR |
-| 10 | D4 | 20 | VGG | 30 | A7 | 40 | GND |
-
-### CN-8 (Slot 2 / S2) -- 40 pins
-
-Same as CN-7 except:
-- Pin 4 = **RAM1** (instead of RAM2)
-- Pin 16 = **K0** (I/O select, instead of S1)
-- Pin 17 = **K1** (I/O select, instead of S2)
-- Pin 18 = **K2** (I/O select, instead of S3)
-
-### Key Signals on Expansion Slots
-
-| Pin | Signal | Function |
-|-----|--------|----------|
-| 5 | PVOUT | Current PVOUT bank state (0 or 1) |
-| 3 | PU | Bank select from I/O 31H |
-| 19 | PT | Bank select from I/O 31H |
-| 2 | PVIN | LH-5803 PV signal input (direct from LH-5803 pin 60) |
-| 4 | RAM2/RAM1 | Chip select for the respective slot |
-| 15 | INH | When pulled low, inhibits internal ROM |
-| 16-18 | S1/S2/S3 or K0/K1/K2 | Sub-select / I/O-select within slot range |
+Full CN-7 (Slot 1) and CN-8 (Slot 2) 40-pin tables, plus a by-function signal summary, have moved to `Expansion-Connectors.md` §4, alongside the PC-1500/1500A connector for direct comparison. Key pins referenced elsewhere in this document: RAM2 (Slot 1 pin 4) / RAM1 (Slot 2 pin 4) as chip select; PVOUT (pin 5), PU (pin 3), PT (pin 19) as the three raw bank-select bits from I/O port 31H; S1-S3 (Slot 1) / K0-K2 (Slot 2) on pins 16-18; INH (pin 15) to inhibit internal ROM.
 
 ---
 
@@ -403,6 +372,103 @@ The TC74HC139F dual decoder selects one of four 8KB SRAMs based on address lines
 
 ---
 
+## Part 7a: CE-1601M Memory Extension Module (64KB)
+
+**Source:** Sharp Service Manual, CE-1601M (code 00ZCE1601MSME, 1987-02).
+
+Where the CE-1600M (Part 7) is small enough (32KB) to be addressed with Port 31H's PVOUT/PU/PT bits alone and can go in either slot, the CE-1601M is the first module that actually needs Port 28H's vertical-bank mechanism, and Sharp restricts it to Slot 2 accordingly.
+
+### Specifications
+
+| Property | Value |
+|---|---|
+| Model | CE-1601M |
+| Capacity | 64KB (2 x 32Kx8 SRAM) |
+| Slot | **Slot 2 (S2) only** -- "If mounted in memory slot S1, the computer may not perform properly or data may not be written properly in the RAM module." |
+| Battery | 3V DC lithium (CR2032 x1); ~5 years in-module, ~20 months removed |
+| Write protect | Slide DIP switch, hardware-gated (see Circuit below) |
+| Size / weight | 40.9 x 42.8 x 8.5mm, 15g -- identical footprint to the CE-1600M |
+
+### Internal Hardware
+
+- 2 x D43256G SRAM (32Kx8 = 32KB each), part suffix -12L or -15L (speed grade; -15L from '87 Feb. production) -- labeled RAM0 and RAM1 on the PWB
+- 1 x TC74HC13xF logic IC (OCR of the scanned manual reads "TC74HC131F"; the pinout in the circuit diagram -- A/B/C address inputs, CK latch-enable, G1/G2A/G2B enables, Y1-Y6 outputs visible -- matches a **74HC137, a 3-line-to-8-line decoder/demultiplexer with an address latch**, not a plain 138. The latch is presumably what lets the module hold its last-selected vertical bank across the brief interval when the Z-80 address bus is doing something unrelated to port 28H.)
+- DAN202K diode array + 1SS98 diode -- battery-vs-VCC switchover, so the module runs off system power when installed and off the CR2032 only when removed or the host is off
+- DTA143XK transistor pair + 4.7K/10K resistor network -- write-protect gating, driven by the DIP slide switch (560K pull-up) and both RD/WR lines
+- 1uF capacitor -- supply smoothing near the battery node
+
+### Circuit Description
+
+The TC74HC137-class decoder's A/B/C select inputs are driven from low address bits, its G-family enables from the slot's **K0/K2** I/O-select lines (pins 4/16/18 on CN-8, per `Expansion-Connectors.md` §4.2) -- i.e. from the Z-80 I/O-port decode for the 28-2FH range, not from the memory-mapped M REQ path. Its Y-outputs each active-low-enable one physical SRAM chip's CS. Because there are only 2 physical SRAM chips (RAM0, RAM1), only 2 of the decoder's 8 possible outputs are ever populated -- the CE-1601M occupies **vertical banks 0 and 1** of the 8 that Port 28H can select (Part 2 above), leaving banks 2-7 electrically unconnected on this specific module. The same decoder, populated with up to 8 physical 32KB chips instead of 2, would use all 8 outputs and reach the full 256KB Slot-2 ceiling described in Part 2 -- the CE-1601M's own decode logic already has that headroom; it's simply built with a fraction of the possible RAM behind it.
+
+Address lines A0-A14 (15 bits, enough for a 32Kx8 chip) go directly to both SRAM chips' address pins; PVOUT is also wired to the RAM chips (visible on both DIP footprints in the schematic) as the bit that distinguishes the two 16KB halves (Z-80 Bank 2 vs. Bank 3) of whichever 32KB vertical bank is currently selected -- confirming the "one vertical bank = 32KB = Bank2+Bank3 together" model from Part 2.
+
+### Usage Modes (via `INIT`)
+
+The 64KB is split at the file-system level, not the hardware level -- hardware always presents all 64KB (2 vertical banks); `INIT` just partitions how the OS's driver treats each vertical bank:
+
+| Mode | Layout | Command |
+|---|---|---|
+| A | Entire 64KB as RAM file | `TITLE ENTER`, `NEW 0 ENTER`, `INIT "S2:","F" ENTER` -> 61KB user (62,464B), 48 directory entries |
+| B | 32KB program memory + 32KB RAM file | `INIT "S2:","P" ENTER` |
+| C | 32KB expansion memory + 32KB RAM file | `INIT "S2:","M" ENTER` -> 29.5KB (30,208B) RAM file; expansion memory area grows by exactly 32,768 bytes |
+| D | Program memory (n KB) + expansion memory ((32-n) KB) + 32KB RAM file | `INIT "S2:","P",n ENTER` -- n is an odd number of KB, 2 to 32 |
+
+Since only vertical bank 0 can hold program/expansion memory (Part 2), Modes B-D always consume vertical bank 0 for that purpose and leave vertical bank 1 (or whatever's left of the split within it) as the RAM-file area -- the OS never needs to drive Port 28H to reach program/expansion memory, only to walk the file system across both banks.
+
+Changing an already-initialized module's mode requires clearing it first (`KILL` every file, or `TITLE "S2:" ENTER NEW 0 ENTER` to clear program memory / `TITLE ENTER NEW ENTER` to clear expansion memory) -- the manual is explicit that the mode can't be changed with live data present.
+
+### Write Protect and Battery Notes
+
+- The slide switch, marked with a dot for the protected position, gates WR through the DTA143XK transistor network -- this is a hardware block on writes, not a software flag, matching the CE-1600M's mechanism.
+- Resetting the PC-1600 while accessing a CE-1601M file can show `NEW0?`; CL clears it and both main memory and module contents survive.
+- Swapping the CR2032 requires removing the module from the computer first if it's in active use as a RAM file or program file; expansion-memory contents do **not** survive a battery swap and must be saved elsewhere first (RAM-file/program-memory contents, held in the SRAM itself, do survive -- it's the expansion-memory *bookkeeping*, held in main-unit RAM, that's lost).
+
+---
+
+## Part 7b: superRAM (Modern 256KB / 2x256KB / 512KB Module)
+
+**Source:** "SHARP PC-1600 'superRAM' Memory Expansion" user manual, Revision 2 (third-party/hobbyist kit).
+
+This is a modern, from-scratch Slot-2 module, useful here because its manual documents the vertical-bank mechanism explicitly and in the module-designer's own words, rather than requiring inference from Sharp's chip layout as with the CE-1601M (Part 7a). It independently confirms the Part 2 model exactly, and directly demonstrates the 512KB path.
+
+### Design
+
+Where Sharp's own modules (CE-1600M, CE-1601M) use one small SRAM chip per vertical bank behind a 3-to-8 decoder, *superRAM* inverts the approach: a **single 4096Kbit (512Kx8) SRAM** (AS6C4008-55ZIN, 19 address lines) is used, and the vertical-bank number written to Port 28H is latched (via a 74HC173, a 4-bit D-type register) directly onto the chip's *high-order* address lines rather than used to pick among several small chips' chip-selects. A 74HC00 (quad NAND) provides glue logic. Functionally identical to Sharp's scheme from the Z-80/OS side -- same Port 28H semantics, same 32KB-per-vertical-bank granularity -- but a materially different circuit: one chip whose address space is sliced by the vertical-bank register, instead of N chips each fully decoded by it.
+
+### Three modes, one board, a solder jumper
+
+A 3-pad jumper field (Options 1/2/3 -- structurally the same idea as a solder-selectable connector pin, just on the module rather than the mainboard) selects which of the SRAM's address line A15 (and, implicitly, whether vertical-bank values 8-15 are reachable at all) is tied to:
+
+| Mode | Option | Mechanism | Result |
+|---|---|---|---|
+| 256KB (default) | 1 (A15 -> GND) | A15 fixed low; only the SRAM's lower 256KB is ever reachable | Native -- `INIT`/`DSKF` work unmodified, exactly like a CE-1601M |
+| 2x256KB | Switch between 1 and 2 (A15 -> GND or VGG) | A15 hardware-toggled between the SRAM's lower and upper 256KB halves | Two independent 256KB banks, native `INIT` in each, but not concurrently addressable -- an operator/hardware switch, not software |
+| 512KB | 1 temporarily, then 3 (A15 -> decoder output Q4) | A15 driven by on-board logic from the vertical-bank register itself (i.e. becomes vertical-bank bit 3, extending the field from 3 to 4 bits) | Full flat 512KB, vertical banks 0-15 -- but only reachable once a patch (below) retargets the OS's capacity bookkeeping |
+
+This confirms directly, from a working implementation, that the 3-bit vs. 4-bit vertical-bank field is purely a hardware choice at the module -- Sharp's own chips just never wired a 4th select bit anywhere.
+
+### The 512KB software patch
+
+Because the PC-1600's `INIT` command has no notion of a >256KB S2: disk, initializing 512KB mode natively fails outright. The manual's documented procedure:
+
+1. Set the jumper to Option 1 (256KB) and `INIT "S2:"` normally (`"F"`, `"M"`, or `"P"` -- same as Part 7a's CE-1601M modes) -- `DSKF"S2:"` reads 251904 (pure RAM disk) or 220160 (with a 32KB S0: expansion carved out), identical figures to a real CE-1601M/256KB-mode module.
+2. Load and `CALL &C0C5` a small patch binary (`SUPERRAM.BIN`) that detects the 256KB/224KB disk just initialized and rewrites its file-system header and capacity fields in place to 512KB/480KB -- described as "not a full replacement of the `INIT` command, but a patch routine only."
+3. Switch the jumper to Option 3 (512KB) and power-cycle -- `DSKF"S2:"` now reads 514048 or 481280.
+
+The manual is explicit that the patch **cannot verify the module actually has 512KB of physical SRAM behind it** -- it only recognizes and rewrites a 256KB/224KB disk's header. Skipping the jumper change (step 3) after patching corrupts the disk, since the OS would then address only the low 256KB of a disk whose header claims 512KB.
+
+Three upload paths for the patch binary are documented (CE-133T/CE-140T RS-232 in native PC-1600 mode; CE-158 in PC-1500-compatibility mode via `MODE1`; CE-150 via cassette-audio `.WAV` playback through Audacity) -- useful context for how any custom machine-code utility gets onto a PC-1600 with no other transfer path, not specific to this module.
+
+### Confirms, precisely
+
+- Port 28H: `OUT (28H),A`, values 0-7 native (256KB), 0-15 with the patch (512KB) -- the exact figures this document's Part 2 derives independently from the CE-1601M.
+- 32KB per vertical bank, exactly matching the CE-1601M's two-chip/two-bank layout.
+- Only vertical bank 0 usable as S0: (main memory expansion); the rest is file-system-only.
+- Sharp's *own* documented ceiling for a factory module is 64KB (CE-1601M) -- the manual states this directly: *"The largest original RAM module from SHARP is the CE-1601M with 64KB."* 256KB and 512KB are exclusively third-party/modern territory as far as this source is aware, though the CE-1601M's own memory-map diagram (Part 7a) does depict a second, larger, Japan-only module -- **CE-1650M** -- using the same vertical-bank scheme; no schematic-level source for it has turned up yet.
+
+---
+
 ## Part 8: Dual-Processor Architecture (Z-80 + LH-5803)
 
 The second processor (LH-5803) provides PC-1500 compatibility.
@@ -451,7 +517,7 @@ Execute: `CALL 01C6H` (CALLH)
 |------|-----|----------|
 | **31H** | R/W | **PRIMARY BANK SELECT REGISTER** (IOW MAP / IOR MAP). b0: Page 0/3 bank (PVOUT). b1-b3: Page 1 bank (4000-7FFF), 8 banks. b4-b6: Page 2 bank (8000-BFFF), 8 banks. b6: LHS1/2/3 remapping. b7: Page 3 bank (C000-FFFF). |
 | **3DH** | W | **HIDDEN ROM / EXTENDED ADDRESS** (IOW C/D). b2: normally set; clearing selects Bank 3b. D0-D2: latched to gate array A14A-A16A. |
-| **28H** | W | **SLOT 2 SUB-BANKING.** Subdivides 8000-BFFF Banks 2+3 for modules >32KB. |
+| **28H** | W | **SLOT 2 VERTICAL-BANK SELECT.** Values 0-7 (confirmed, CE-1601M manual, Part 7a) select which 32KB "vertical bank" occupies Banks 2+3 (8000-BFFF) -- decoded on the module itself, not by the mainboard. 8 banks x 32KB = 256KB ceiling for Slot 2 with a standard 3-to-8 on-module decoder; see Part 2. |
 | 30H | R/W | Module control (IOW MOD / IOR MOD) |
 | 32H | R/W | Interrupt cause/priority |
 | 35H | W | Interrupt mask register |
@@ -484,7 +550,7 @@ This section describes how to adapt a PC-1500 memory extension module (8 banks o
 The PC-1500 uses a different expansion connector than the PC-1600's 40-pin slot connectors. An adapter board is needed.
 
 **PC-1600 Slot 2 is preferred** because:
-- Port 28H provides sub-banking for modules >32KB
+- Port 28H provides vertical-bank sub-selection for modules >32KB (up to 256KB, confirmed in Part 2/7a)
 - RAM1 chip select is on pin 4
 - K0/K1/K2 I/O select signals available on pins 16-18
 - Full address bus (A0-A15), data bus (D0-D7), RD, WR available
@@ -499,7 +565,7 @@ Standard bank signals on the slot connector:
 - **PT** (pin 19): 1 bit
 - **RAM1** (pin 4): chip select for Slot 2
 
-For 8 banks you need 3 address bits. The available bank signals (PVOUT, PU, PT) provide exactly 3 bits, but the firmware only uses 2 of these for Slot 2 banking (Banks 2 and 3). For full 8-bank access, you need **Port 28H for sub-banking**.
+**Correction (confirmed against real CE-1601M hardware, Part 7a):** Port 28H's vertical-bank field selects among 32KB units, not 16KB ones -- PVOUT still does the within-vertical-bank 16KB half-select, exactly as it does for the un-sub-banked case. So this 128KB module doesn't need all 8 vertical banks; it needs exactly **4** (0-3), with PVOUT distinguishing each bank's two 16KB halves. The wiring below is adjusted accordingly -- 2 bank-select bits from Port 28H (not 3), plus PVOUT.
 
 ### Approach A: Direct Port 28H Sub-Banking (Recommended)
 
@@ -509,7 +575,7 @@ Port 28H is specifically designed for Slot 2 modules larger than 32KB. The modul
 
 1. Build an adapter board that maps the PC-1500 module's edge connector to the PC-1600 Slot 2 (CN-8) 40-pin connector.
 
-2. Wire the 3 bank select lines from your 8x16K module to signals derived from Port 28H outputs. Port 28H bits are accessible on the Slot 2 connector through the K0/K1/K2 I/O select lines (pins 16-18).
+2. Wire 2 of your module's 3 bank-select lines to a vertical-bank value (0-3) written to Port 28H; wire the third to PVOUT (pin 5) directly, since it's already the within-vertical-bank 16KB half-select. Port 28H itself is decoded on the module side from the K0/K1/K2 I/O-select lines (pins 16-18), per Part 7a.
 
 3. Use RAM1 (pin 4) as the master chip enable, gated with the decoded bank select.
 
@@ -523,11 +589,12 @@ If direct Port 28H wiring is insufficient, write a machine-language driver that:
 
 1. Resides in Bank 0 (0000-3FFF) or is called via `BANKCALL` (019FH).
 
-2. Manages the 8 banks by directly writing to Port 28H:
+2. Manages the 8 banks -- 4 vertical banks x 2 PVOUT halves each -- by writing the vertical-bank number to Port 28H and setting PVOUT for the half:
 
 ```asm
-LD A,<bank_number>    ; 0-7
-OUT (28H),A           ; Select sub-bank in Slot 2
+LD A,<vertical_bank>  ; 0-3
+OUT (28H),A            ; Select vertical bank in Slot 2
+; then RPV/SPV or the module's own PVOUT-equivalent logic selects the 16KB half
 ```
 
 3. Performs the actual data transfer while the correct bank is selected.
@@ -556,12 +623,12 @@ FILES "S2:"
 KILL "S2:filename"
 ```
 
-4. For the 8 sub-banks via Port 28H, you may need a custom driver that extends the standard 2-bank (32KB) Slot 2 handling to cover all 8 banks (128KB). This driver would:
+4. For the 8 sub-banks (4 Port-28H vertical banks x 2 PVOUT halves), you may need a custom driver that extends the standard 2-bank (32KB) Slot 2 handling to cover all 128KB. This driver would:
    - Hook the file system calls for S2:
-   - Calculate which 16KB sub-bank contains the target data
-   - Write the appropriate value to Port 28H
+   - Calculate which vertical bank and PVOUT half contains the target data
+   - Write the vertical bank to Port 28H and set PVOUT for the half
    - Perform the access in the 8000-BFFF window
-   - Restore the previous Port 28H state
+   - Restore the previous Port 28H/PVOUT state
 
 ### Key Considerations
 
