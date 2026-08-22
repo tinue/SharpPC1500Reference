@@ -44,14 +44,16 @@ Writing to Z-80 I/O port 31H selects which bank appears in each page:
 
 | Bit | Name | Function |
 |-----|------|----------|
-| b0 | PVOUT | Bank for 0000-3FFF and C000-FFFF (0=Bank 0, 1=Bank 1) |
-| b1 | PU | Bank select for 4000-7FFF and 8000-BFFF |
-| b2 | PT | Bank select for 4000-7FFF and 8000-BFFF |
-| b3 | b3 | Bank select for 4000-7FFF and 8000-BFFF |
-| b4 | b4 | Bank select for 8000-BFFF |
-| b5 | b5 | Bank select for 8000-BFFF |
-| b6 | b6 | Controls LHS1/LHS2/LHS3 memory select remapping |
-| b7 | b7 | Bank select for C000-FFFF |
+| b0 | PVOUT | Bank select for 0000-3FFF **only** (1 bit, independent of b7 below) |
+| b1 | PU | Bank select for 4000-7FFF, together with b2-b3 (3-bit field, independent of PVOUT) |
+| b2 | PT | Bank select for 4000-7FFF, together with b1/b3 |
+| b3 | b3 | Bank select for 4000-7FFF, together with b1-b2 |
+| b4 | b4 | Bank select for 8000-BFFF, together with b5-b6 (3-bit field, independent of PVOUT) |
+| b5 | b5 | Bank select for 8000-BFFF, together with b4/b6 |
+| b6 | b6 | Bank select for 8000-BFFF, together with b4-b5. **Separately**, also controls LHS1/LHS2/LHS3 memory select remapping (Part 4) |
+| b7 | b7 | Bank select for C000-FFFF **only** (1 bit, independent of b0 above) |
+
+**Correction (2026, cross-checked against PockEmul's emulation source, `pc1600.cpp` `out()`/`Chk_Adr`/`Chk_Adr_R` — see `../../pc1600/notes/Emulator-Cross-Check.md` for the full comparison):** the table above originally described b0/PVOUT as governing *both* 0000-3FFF and C000-FFFF together, and the two truth tables below originally listed PVOUT as a fourth input alongside b1-b3/b4-b6 for the 4000-7FFF and 8000-BFFF bank number — both are self-contradictory with the separate "b7 selects C000-FFFF" line, and both are contradicted by the emulator's `out()` handler for port 31H, which extracts four **independent, non-overlapping** bit-fields with a plain shift-and-mask (`bank1 = value&1`; `bank2 = (value>>1)&7`; `bank3 = (value>>4)&7`; `bank4 = (value>>7)&1`) — no bit is read twice, and no page's bank number depends on any other page's bits. The corrected model above and the two truth tables below reflect this. **Not yet independently confirmed against real hardware or the service manual's raw text a second time** — flagged per this project's usual practice for emulator-sourced corrections, not silently applied as certain.
 
 **Example** (from Systemhandbuch):
 
@@ -70,31 +72,35 @@ D3 31    OUT (31H),A    ; b4-b6=010: 8000-BFFF -> Bank 2
 | 0 | Bank 0 (PVOUT=0) |
 | 1 | Bank 1 (PVOUT=1) |
 
-**Address range 4000-7FFF (Page 1):**
+**Address range 4000-7FFF (Page 1) — corrected, see note above:**
 
-| Bank | b3 | b2 (PT) | b1 (PU) | PVOUT |
-|------|----|---------|---------|-------|
-| 0 | 0 | 0 | 0 | 0 |
-| 1 | 0 | 0 | 1 | 1 |
-| 2 | 0 | 1 | 0 | 0 |
-| 3 | 0 | 1 | 1 | 1 |
-| C | 1 | 0 | 0 | 0 |
-| 5 | 1 | 0 | 1 | 1 |
-| 6 | 1 | 1 | 0 | 1 |
-| 7 | 1 | 1 | 1 | 1 |
+| Bank | b3 | b2 (PT) | b1 (PU) |
+|------|----|---------|---------|
+| 0 | 0 | 0 | 0 |
+| 1 | 0 | 0 | 1 |
+| 2 | 0 | 1 | 0 |
+| 3 | 0 | 1 | 1 |
+| 4 | 1 | 0 | 0 |
+| 5 | 1 | 0 | 1 |
+| 6 | 1 | 1 | 0 |
+| 7 | 1 | 1 | 1 |
 
-**Address range 8000-BFFF (Page 2):**
+Plain 3-bit binary value of b3:b2:b1, PVOUT/b0 not involved. (The original table's "C" row is corrected to "4" here — it was a straight binary-count table miscopied with a stray hex digit, consistent with the emulator's plain `(value>>1)&0x07` extraction.)
 
-| Bank | b5 | b4 | b3 | PT | PU | PVOUT |
-|------|----|----|----|----|----|-------|
-| 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| 1 | 0 | 0 | 1 | 0 | 0 | 1 |
-| 2 | 0 | 1 | 0 | 0 | 1 | 0 |
-| 3 | 0 | 1 | 1 | 0 | 1 | 1 |
-| C | 1 | 0 | 0 | 1 | 0 | 0 |
-| 5 | 1 | 0 | 1 | 1 | 0 | 1 |
-| 6 | 1 | 1 | 0 | 1 | 1 | 0 |
-| 7 | 1 | 1 | 1 | 1 | 1 | 0 |
+**Address range 8000-BFFF (Page 2) — corrected, see note above:**
+
+| Bank | b6 | b5 | b4 |
+|------|----|----|----|
+| 0 | 0 | 0 | 0 |
+| 1 | 0 | 0 | 1 |
+| 2 | 0 | 1 | 0 |
+| 3 | 0 | 1 | 1 |
+| 4 | 1 | 0 | 0 |
+| 5 | 1 | 0 | 1 |
+| 6 | 1 | 1 | 0 |
+| 7 | 1 | 1 | 1 |
+
+Plain 3-bit binary value of b6:b5:b4, PVOUT/b0 and PT/PU (which are b1/b2, page-1's own bits) not involved — the original table's PT/PU columns here were almost certainly a copy-paste leftover from the page-1 table, not a real page-2 input.
 
 **Address range C000-FFFF (Page 3):**
 
@@ -110,7 +116,7 @@ D3 31    OUT (31H),A    ; b4-b6=010: 8000-BFFF -> Bank 2
 | 0000-3FFF | System ROM (CS001) **NEVER SWITCHED OUT** | (Slot 2) | -- | -- |
 | 4000-7FFF | System ROM (BASIC, Editor) | Slot 2 ROM | Slot 1 ROM | System ROM (CS24, sub-banked 2x8K) |
 | 8000-BFFF | Slot 1a (RAM2) | Slot 1b (RAM2) | Slot 2a (RAM1) | Slot 2b (RAM1) |
-| C000-FFFF | Internal 16KB RAM (RAM3) | (Bank 1) | -- | -- |
+| C000-FFFF | Internal 16KB RAM (RAM3) | Not internal hardware -- routed to the external 60-pin system bus connector (per PockEmul's `Chk_Adr`/`Chk_Adr_R`, `b7`=1 dispatches to `readBus`/`writeBus` rather than any local RAM; whatever's actually there depends on what's attached externally. Single-source, not yet cross-checked against the service manual -- see `../../pc1600/notes/Emulator-Cross-Check.md`) | -- | -- |
 
 Additional banks in 4000-7FFF:
 
@@ -136,7 +142,7 @@ Additional banks in 8000-BFFF:
 
 **Port 28H (Slot 2 sub-banking) -- "vertical bank" select:**
 - Write-only, `OUT (28H),A` in Z-80 assembler. Confirmed by two independent sources now: the CE-1601M Service Manual's memory-map figure (*"The vertical bank of S2 is selected when data of 0 to 7 are written in 28H of the I/O space"* -- an OCR-garbled scan renders this "0 to 9", but is settled by the second source), and the *superRAM* modern-module manual (§8, "Memory Map"), which states outright: *"in 256KB Mode it takes values between 0 and 7 (8 vertical banks 32KB each result in 256KB). So in 512KB Mode it takes values between 0 and 15."* Confirmed: **0-7**, 8 vertical banks.
-- This is a **second, independent bank-select axis for Slot 2's 8000-BFFF window**, orthogonal to Port 31H's b4-b6 field (Part 2 above). Port 31H's field selects among the *global* 8 banks for the whole 8000-BFFF page, of which only Bank 2 and Bank 3 physically route to Slot 2 (RAM1) at all -- call this the "horizontal" axis (2 usable positions for Slot 2, 16KB each = 32KB reachable per module without touching Port 28H). Port 28H then multiplexes *within* whatever module sits in Slot 2, selecting one of up to 8 "vertical banks" -- each vertical bank being a distinct 32KB unit occupying that same Bank-2/Bank-3 footprint. Confirmed against the CE-1601M's own chip layout (a 64KB module built from two 32Kx8 SRAM chips occupies exactly *two* vertical banks, 0 and 1) and, independently, against the *superRAM*'s own memory map (Part 7b): 8 vertical banks x 32KB = **256KB, the officially-supported ceiling for Slot 2**.
+- This is a **second, independent bank-select axis for Slot 2's 8000-BFFF window**, orthogonal to Port 31H's b4-b6 field (Part 2 above). Port 31H's field selects among the *global* 8 banks for the whole 8000-BFFF page, of which only Bank 2 and Bank 3 physically route to Slot 2 (RAM1) at all -- call this the "horizontal" axis (2 usable positions for Slot 2, 16KB each = 32KB reachable per module without touching Port 28H). Port 28H then multiplexes *within* whatever module sits in Slot 2, selecting one of up to 8 "vertical banks" -- each vertical bank being a distinct 32KB unit occupying that same Bank-2/Bank-3 footprint. Confirmed against the CE-1601M's own chip layout (a 64KB module built from two 32Kx8 SRAM chips occupies exactly *two* vertical banks, 0 and 1) and, independently, against the *superRAM*'s own memory map (Part 7b): 8 vertical banks x 32KB = **256KB, the officially-supported ceiling for Slot 2**. **Third independent confirmation:** PockEmul's `Chk_Adr`/`Chk_Adr_R` read the vertical-bank value directly from `imem[0x28]` (the CPU's own last-written-I/O-value latch, not a dedicated emulator variable -- i.e. genuinely modeled as a hardware register read, not just bookkeeping) and compute the RAM offset as `0xA0000 + (rambank-1)*0x8000 + ...`, against a RAM region sized exactly `0xA0000`-`0xE0000` = 256KB (`pc1600.cpp:150-165`) -- independently landing on the same 8-bank/32KB/256KB figure with no reference to either the CE-1601M or superRAM manuals. Note the emulator's RAM region is hardcoded to exactly 256KB, so it has no way to represent the superRAM's third-party 512KB (0-15) patched mode -- that's a scope gap in the emulator, not a contradiction of anything documented here.
 - **Only vertical bank 0 is usable as directly-addressable program or expansion memory** (i.e. through ordinary `BANKSET`/Port 31H access); vertical banks 1-7 are reachable only through the file system (RAM-disk), because the OS's program/expansion-memory bank management drives Port 31H alone and has no notion of also holding Port 28H at a particular value -- only the file-system driver issues explicit `OUT 28H` writes per access. Stated directly by both the CE-1601M manual and the *superRAM* manual (§8: *"only vertical bank 0 can be configured as main memory expansion (S0)"*). This is also why Mode A-D of the CE-1601M (Part 7a) always reserves at least 32KB -- vertical bank 0 -- for program/expansion use, with any additional 32KB blocks (vertical banks 1+) usable only as a RAM file.
 - **The 512KB figure is now directly confirmed, not just plausible**, by a real product: the *superRAM* module (Part 7b) uses vertical-bank values 8-15 for its 512KB mode, on the exact same Port 28H mechanism -- the PC-1600's own firmware `INIT` command simply never generates or validates values above 7, since Sharp never shipped a module needing them; a small patch routine (loaded and `CALL`ed, not a ROM modification) is sufficient to retarget the file-system header/capacity fields to the wider range. Nothing about Port 28H itself, or the Z-80 I/O space, imposes an 8-bank ceiling -- that was purely a consequence of Sharp's own modules never using more than a 3-bit vertical-bank field.
 
@@ -551,12 +557,13 @@ Execute: `CALL 01C6H` (CALLH)
 
 | Port | Dir | Function |
 |------|-----|----------|
-| **31H** | R/W | **PRIMARY BANK SELECT REGISTER** (IOW MAP / IOR MAP). b0: Page 0/3 bank (PVOUT). b1-b3: Page 1 bank (4000-7FFF), 8 banks. b4-b6: Page 2 bank (8000-BFFF), 8 banks. b6: LHS1/2/3 remapping. b7: Page 3 bank (C000-FFFF). |
+| **31H** | R/W | **PRIMARY BANK SELECT REGISTER** (IOW MAP / IOR MAP). b0: Page 0 bank (PVOUT), independent 1 bit. b1-b3: Page 1 bank (4000-7FFF), independent 3-bit field, 8 banks. b4-b6: Page 2 bank (8000-BFFF), independent 3-bit field, 8 banks. b6: also separately controls LHS1/2/3 remapping. b7: Page 3 bank (C000-FFFF), independent 1 bit -- **corrected, was previously described as sharing a bit with b0/Page 0; see Part 2's correction note.** |
 | **3DH** | W | **HIDDEN ROM / EXTENDED ADDRESS** (IOW C/D). b2: normally set; clearing selects Bank 3b. D0-D2: latched to gate array A14A-A16A. |
-| **28H** | W | **SLOT 2 VERTICAL-BANK SELECT.** Values 0-7 (confirmed, CE-1601M manual, Part 7a) select which 32KB "vertical bank" occupies Banks 2+3 (8000-BFFF) -- decoded on the module itself, not by the mainboard. 8 banks x 32KB = 256KB ceiling for Slot 2 with a standard 3-to-8 on-module decoder; see Part 2. |
+| **28H** | W | **SLOT 2 VERTICAL-BANK SELECT.** Values 0-7 (confirmed, CE-1601M manual, Part 7a, and independently by PockEmul's emulation source, Part 2 above) select which 32KB "vertical bank" occupies Banks 2+3 (8000-BFFF) -- decoded on the module itself, not by the mainboard. 8 banks x 32KB = 256KB ceiling for Slot 2 with a standard 3-to-8 on-module decoder; see Part 2. |
 | 30H | R/W | Module control (IOW MOD / IOR MOD) |
 | 32H | R/W | Interrupt cause/priority |
 | 35H | W | Interrupt mask register |
+| **38H** | W | **CPU SWITCH TRIGGER.** Writing here hands control between the Z-80 and the LH5803 (`cpuSwitchPending` in PockEmul's `out()` handler -- the software-visible counterpart to the `ELH`/`SLCB` gate-array bus-arbitration signals in Part 3). New finding, single-source (emulator only, not yet cross-checked against the service manual's own port list) -- see `../../pc1600/notes/Emulator-Cross-Check.md`. |
 | 39H | W | Interrupt vector low byte (Z-80 IM2 mode) |
 
 ### Z-80 I/O Space Overview
