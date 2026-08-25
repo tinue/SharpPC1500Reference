@@ -4,13 +4,17 @@
 
 This document consolidates the physical expansion-connector pinouts for the PC-1500, PC-1500A, and PC-1600 (Slot 1 and Slot 2) in one place, since understanding how any given module (period or modern) works starts with knowing exactly which physical wires it has to work with.
 
-It covers: the PC-1500's 40-pin connector (§2); the PC-1500A's pin reassignment relative to the PC-1500, and how far a fixed-wiring module can be pushed against that reassignment (§3); and the PC-1600's two 40-pin slot connectors, CN-7 (Slot 1) and CN-8 (Slot 2) (§4).
+It covers: the PC-1500's 40-pin and 60-pin connectors (§2); the PC-1500A's pin reassignment relative to the PC-1500, and how far a fixed-wiring module can be pushed against that reassignment (§3); and the PC-1600's 60-pin system bus connector and two 40-pin slot connectors, CN-7 (Slot 1) and CN-8 (Slot 2) (§4).
 
 For what happens *behind* these pins — the on-mainboard address decoders, chip populations, and bank-switching logic that give each pin its meaning — see `PC-1500-Address-Decoding.md` (PC-1500/1500A) and `PC-1600-Memory-Bank-Switching.md` (PC-1600). This document is the physical-pinout reference those documents assume; §3 here also hosts a worked example (a hypothetical wide module) that draws on both.
 
 ---
 
-## 2. The PC-1500 40-Pin Expansion Connector
+## 2. The PC-1500 Expansion Connectors
+
+The PC-1500 exposes two distinct expansion connectors, both documented in TRM §4-3 ("Connector signals/LSI signals"): a 40-pin connector (§4-3-1) and a 60-pin connector (§4-3-2). The TRM's own introductory note to §4-3 states that "there may be a different kind of connector used for the 40 and 60 pin connector of the PC-1500 on account of product revision," and that "the 64-pin connector on the back of the CE-150 is compatible with the 60-pin connector of the PC-1500."
+
+### 2.1 40-Pin Connector
 
 The PC-1500 exposes its expansion bus on a 40-pin edge connector on the rear (confirmed by physical pin count on real hardware).
 
@@ -42,6 +46,86 @@ The PC-1500 exposes its expansion bus on a 40-pin edge connector on the rear (co
 **YO** (pin 4) is the sole chip select for the entire &0000–&3FFF module RAM/ROM region — a 16KB window with no further narrowing done by the mainboard. A module populating this window must do its own internal sub-decoding (see the CE-155 example in `PC-1500-Address-Decoding.md` §3.2).
 
 There is no dedicated bank-select address register on the connector for any region — PU/PV (write-only CPU flipflops) and the address-range strobes (Y0, Y2, S1–S3, S4) are the only mechanisms available for a module to learn "which bank" or "which sub-region" the host is addressing.
+
+### 2.2 60-Pin Connector
+
+| Pin | Signal | Description |
+|-----|--------|-------------|
+| 1 | AD7 | Address bus |
+| 2 | AD6 | Address bus |
+| 3 | AD5 | Address bus |
+| 4 | AD4 | Address bus |
+| 5 | AD3 | Address bus |
+| 6 | AD2 | Address bus |
+| 7 | AD1 | Address bus |
+| 8 | AD0 | Address bus |
+| 9 | PB0 | Not used (may be NC depending on production month) |
+| 10 | PC7 | Not used |
+| 11 | VCC | Power |
+| 12 | VCC | Power |
+| 13 | NC | Not connected |
+| 14 | NC | Not connected |
+| 15 | **PV** | Chip select |
+| 16 | **PU** | Chip select |
+| 17–24 | D7–D0 | Data bus |
+| 25 | INHIBIT | Prohibits ROM select of the PC-1500, when connected to GND |
+| 26 | WEX | External WAIT signal |
+| 27 | CMTIN | Cassette data input |
+| 28 | W1 | WAIT condition input |
+| 29 | CMTOUT | Cassette data output |
+| 30 | INT | Interrupt request to CPU |
+| 31–38 | AD8–AD15 | Address bus |
+| 39 | PB1 | Not used (may be NC depending on production month) |
+| 40 | NC | Not connected |
+| 41 | VCC | Power |
+| 42 | VCC | Power |
+| 43 | F-GND | Frame GND |
+| 44 | VBAT | Battery voltage |
+| 45 | VBAT | Battery voltage |
+| 46 | VBAT | Battery voltage |
+| 47 | VBAT | Battery voltage |
+| 48 | VBAT | Battery voltage |
+| 49 | NC | Not connected |
+| 50 | BFO | VCC output |
+| 51 | φOS | Clock in the same phase as the LSI internal clock |
+| 52 | GND | Ground |
+| 53 | GND | Ground |
+| 54 | GND | Ground |
+| 55 | GND | Ground |
+| 56 | DME0 | Chip select taking consideration of WAIT condition (ME0 area designation) |
+| 57 | R/W | Memory read/write signal |
+| 58 | DME1 | Chip select taking consideration of WAIT condition (ME1 area designation) |
+| 59 | ME1 | ME1 area designation |
+| 60 | OD | Output disable |
+
+*Source: Sharp PC-1500 Technical Reference Manual, section 4-3-2. Note in source: "PB0 of No. 9 may be NC depending on production month. PB1 of No. 39 may be NC depending on production month."*
+
+This is the PC-1500(A)'s side expansion connector: the CE-150 plugs into it via a 60-pin male connector, and per the TRM §4-3 note above, the CE-150's own 64-pin female connector at its rear is pin-compatible with it — letting a further peripheral (typically a CE-158) chain onto the CE-150 in turn. This connector is the PC-1500's I/O expansion bus, distinct in purpose from the 40-pin memory-expansion connector in §2.1: it carries the full 16-bit address and 8-bit data bus (like the 40-pin connector), but adds cassette I/O (CMTIN/CMTOUT), an interrupt line (INT), an external WAIT mechanism (WEX/W1), and a second WAIT-qualified chip-select/area pair (DME1/ME1) alongside DME0 — none of which appear on the 40-pin connector at all.
+
+#### 2.2a Cross-validation against the PC-1600's 60-pin connector
+
+The PC-1600's 60-pin system bus connector (§4.0 below) is a documented match in form factor and largely in pin assignment, confirming both scans are internally consistent (this document's original transcription source for §4.0 was the PC-1600 TRM's §10.3(1), a separate document from the PC-1500 TRM scanned here). Lining the two tables up pin-for-pin:
+
+**Strong agreement** (same pin, equivalent signal, in both machines — good corroboration for both scans):
+- Pins 1–8: address bus low byte, identical bit order (AD7→AD0 / A7→A0) on both.
+- Pins 17–24: data bus, identical order (D7→D0) on both.
+- Pins 25: INHIBIT (PC-1500) / INH (PC-1600) — same function, same pin.
+- Pins 27, 29: CMTIN, CMTOUT — identical on both, same pins.
+- Pins 31–38: address bus high byte, identical order (AD8→AD15 / A8→A15) on both.
+- Pins 41, 52–54: VCC and GND land on the same pins on both machines.
+- Pin 50–51: BFO, φOS — identical signals, same pins, on both.
+- Pin 56: DME0 — identical signal, same pin, on both.
+
+**Divergences** (real architectural differences between the LH5801-based PC-1500 and the Z-80/LH5803-based PC-1600, not transcription errors — the PC-1600 replaces the PC-1500's direct PU/PV CPU flipflops with a gate-array-buffered PT/PU/PVOUT triple, and its Z-80 core has separate RD/WR/IORQ/MREQ/INT/M1 lines where the LH5801 has a single R/W and a single INT):
+- Pins 15–16: PC-1500 has PV then PU; PC-1600 has PU then PVOUT — the bank-select signals are present on both but in reversed pin order and with PV replaced by the gate-array's PVOUT.
+- Pins 9–10, 13–14: PC-1500 has PB0/PC7 (unused)/NC/NC; PC-1600 has INT1̄/M1̄/RSTE/PT — the PC-1600 uses this range for Z-80-specific control and the sub-CPU's PT bank-select bit.
+- Pins 26, 28, 30: PC-1500 WEX/W1/INT vs. PC-1600 IORQ/WAIT/IRQ — both pairs are WAIT- and interrupt-related, but the PC-1600 versions are genuine Z-80 bus signals rather than the PC-1500's simpler external-WAIT/interrupt lines.
+- Pins 39, 42: PC-1500 has PB1 (unused)/VCC; PC-1600 has VGG/NC.
+- Pins 43–49: PC-1500 runs F-GND (43) then five VBAT pins (44–48) then NC (49); PC-1600 runs FG (43–44) then two VBAT pins (45–46) then VP (47) and NC (48–49, with MREQ at 49). Both machines dedicate this range to frame ground + battery backup, but with different pin counts per signal.
+- Pin 55: GND (PC-1500) vs. NC (PC-1600).
+- Pins 57–60: PC-1500 has R/W, DME1, ME1, OD; PC-1600 has WR̄, ELH̄, IOE, RD̄ — the PC-1500's single-strobe LH5801 read/write and second-bank chip-select signals are replaced by the Z-80's split RD̄/WR̄ strobes and the PC-1600-specific ELH̄/IOE lines.
+
+**Net assessment:** the two scans agree exactly, pin-for-pin, on every signal common to both CPU architectures (address bus, data bus, INHIBIT/INH, CMTIN/CMTOUT, VCC/GND placement, BFO/φOS, DME0) — strong evidence neither transcription has a shifted or misread pin in those ranges. The divergences are concentrated exactly where the two machines' CPUs and bus protocols genuinely differ (bank-select signal set, interrupt/WAIT signals, read/write strobes, ground/battery pin counts), which is what a real hardware difference should look like rather than an OCR error. The one place worth double-checking against a second PC-1500 TRM scan if one surfaces: pins 15–16 (PV/PU order) and 43–49 (F-GND/VBAT run), since those are the only divergent regions where a plausible alternative reading (e.g. an accidentally swapped row) would still land on named signals rather than obvious garbage.
 
 ---
 
