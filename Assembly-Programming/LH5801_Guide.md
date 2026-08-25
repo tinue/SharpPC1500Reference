@@ -77,6 +77,13 @@ Called from BASIC: `CALL &7800`
 **Toolchain — building and assembling:**
 - `sdaslh5801` is built from the sibling repo `sdcc-pc1500` (public: [github.com/pchambre/sdcc-pc1500](https://github.com/pchambre/sdcc-pc1500), not part of this repository — see this repo's README for the full sibling-repo map), from its `sdcc` checkout (`sdcc-pc1500/sdcc/`). Run `git submodule update --init` first if `sdcc/` isn't checked out yet, then `./configure && make` from inside `sdcc-pc1500/sdcc/`. The built binary ends up at `sdcc-pc1500/sdcc/bin/sdaslh5801` (or `sdcc/bin_vc/sdaslh5801.exe` for the native-Windows MSVC build).
 - Assemble a source file directly with `sdaslh5801 -plosgff file.asm`, or use the `lh5801-asm` VS Code extension's **"LH5801: Assemble to BIN"** command, which runs `sdaslh5801` → `sdld` → `makebin` for you and produces a flat, loadable `<name>.bin` beside the source. No separate load-address prompt is needed — it's read straight out of the file's own `.area CODE (ABS)` / `.org` pair, so always include that header. `.lst`/`.ihx`/`.map` files are left in place beside the `.bin` in case a link error needs investigating.
+- **Doing the same three steps by hand** (no VS Code, e.g. from a headless agent shell) — confirmed working end to end against a real `sdcc-pc1500` build:
+  ```sh
+  sdaslh5801 -plosgff file.asm          # -> file.rel, file.lst, file.sym
+  sdld -i file file.rel                 # -> file.ihx (Intel hex)
+  makebin -p -o 0x<ORG> file.ihx file.bin
+  ```
+  The `-o 0x<ORG>` on `makebin` is not optional: `makebin` maps Intel-hex addresses onto file offset 0, so a program `.org`'d at, say, `0x7C01` without `-o 0x7C01` produces a ~32 KB file that's almost entirely `0xFF` padding before the real 50-ish bytes of code. `-p` (pack) then truncates the file to the last occupied byte, so the two flags together give exactly the flat, loadable blob the VS Code extension itself produces — verify with `wc -c file.bin` against the `.lst` file's own last address minus `.org`.
 - Disassemble a binary back to sdas source with `pc1500disasm`, e.g. `pc1500disasm --mode program --base 0xADDR file.bin -o file.asm` (default `--dialect sdas`, matching this project's own convention).
 
 **File requirements:** ASCII text, Unix (LF) line endings — non-ASCII characters (Unicode arrows, em-dashes) and Windows CRLF line endings both risk parse errors.
@@ -135,10 +142,10 @@ On the PC-1500 itself, **before** running the `put` command above:
 
 ```
 SETDEV U1,CI,CO
-CLOAD
+CLOADM
 ```
 
-(`SETDEV U1,CI,CO` redirects console I/O to the CE-158X's USB port; it must be re-entered after every power cycle or `NEW`.) The PC-1500 needs paced transmission — `SharpDataExchange` applies this automatically; if transfer is unreliable, check the USB cable and CE-158X connection before suspecting the program itself. See `SharpDataExchange/MANUAL.md` for BASIC-program transfer (`get`/`put`), Reserve Area backup, and PC-1600 wiring — this appendix only covers the machine-code-load path relevant to assembly programs.
+(`SETDEV U1,CI,CO` redirects console I/O to the CE-158X's USB port; it must be re-entered after every power cycle or `NEW`. `CLOADM` — not plain `CLOAD`, which only loads BASIC programs — receives machine language.) The PC-1500 needs paced transmission — `SharpDataExchange` applies this automatically; if transfer is unreliable, check the USB cable and CE-158X connection before suspecting the program itself. See `SharpDataExchange/MANUAL.md` for BASIC-program transfer (`get`/`put`), Reserve Area backup, and PC-1600 wiring — this appendix only covers the machine-code-load path relevant to assembly programs.
 
 ---
 
@@ -275,6 +282,8 @@ These small address-arithmetic and bank-switch idioms come up constantly but are
 | `(label)&0xFF` | Low byte of `label`'s address |
 | `(label+n)>>8` | High byte of `label+n` |
 | `(label+n)&0xFF` | Low byte of `label+n` |
+| `>label` | High byte of `label` (sdas prefix operator, equivalent to `(label)>>8`) |
+| `<label` | Low byte of `label` (sdas prefix operator, equivalent to `(label)&0xFF`) |
 | `spu` then `spv` | HIGH_BANK -- switch to ME1 |
 | `rpu` then `spv` | LOW_BANK -- switch to ME0 |
 
@@ -282,7 +291,22 @@ These small address-arithmetic and bank-switch idioms come up constantly but are
 ```asm
             ldi     yh,(MY_TABLE)>>8
             ldi     yl,(MY_TABLE)&0xFF
+
+; equivalent, using sdas's own prefix operators instead:
+            ldi     yh,>MY_TABLE
+            ldi     yl,<MY_TABLE
 ```
+
+Both forms were confirmed byte-identical against a real `sdaslh5801` build (`>`/`<` are `asexpr.c`'s own high/low-byte-select operators, source `sdcc-pc1500/sdcc/sdas/asxxsrc/asexpr.c`, not a project-specific macro) — pick whichever reads better; this guide's own samples use both.
+
+**`.equ` constants support address arithmetic directly**, so a block of related addresses can be defined once relative to a single base and relocated by editing only that base line:
+```asm
+D           .equ    0x7C01      ; move this one line to relocate the whole block
+D_FLAG      .equ    D+0
+D_RESULT_HI .equ    D+1
+D_RESULT_LO .equ    D+2
+```
+`D_RESULT_HI` etc. assemble to plain absolute addresses (`0x7C02` here) — this is ordinary constant-folding at assemble time, not a runtime computation, and combines with `>`/`<` normally (`ldi yh,>D_RESULT_HI`).
 
 **The V-prefix instructions** (`vej`, `vmj`, `vzs`, `vzr`) are real sdas mnemonics — ROM vector calls, not bare LH5801 instructions. See the VEJ/VMJ syntax rules in the Instruction Set Reference below.
 
@@ -606,6 +630,28 @@ FAIL:
 
 ---
 
+### 15. Priming T to an Exact Bit Pattern for a Flag-Behavior Test
+
+There is no immediate-load for T -- the only way to write it is `att` (`a → t`, all 5 bits overwritten unconditionally, see the ATT entry below), so setting T to a literal value always routes through A first. This matters when the routine under test also needs a *specific* value in A (not whatever `att` happened to leave behind), because almost every way of loading a new value into A -- `ldi a,n`, `lda ...`, `tta`, `pop a`, `and`/`ora`/`eor` -- sets the Z flag from the loaded/computed result as a side effect (`ldi RL,n`/`ldi RH,n` into the byte registers are the exception: no flag changes, see the LDI entry below). A careless reload of A after `att` can silently corrupt the very T value the test is trying to hold steady.
+
+The fix is to pick the post-`att` A value so its own Z side effect is a no-op against the T bit pattern already in place -- most simply, by choosing a T value whose Z bit already matches whether the follow-up A load is zero or not:
+
+```asm
+; Goal: T = 0x1F (IE|H|V|Z|C all set) going into some instruction under
+; test, with A = 0x00 as that instruction's own operand.
+            ldi     a,0x1F
+            att                 ; T = 0x1F -- direct overwrite, all 5 bits
+; A must become 0x00 for the instruction under test, but "ldi a,0x00"
+; sets Z from the loaded value (0x00 -> Z=1) -- which 0x1F's own Z bit
+; (bit 2) already is, so this is a no-op against T:
+            ldi     a,0x00      ; A = 0x00; T is still 0x1F
+            adr     u           ; the instruction under test
+```
+
+If the needed A value and the needed T pattern don't line up this conveniently, `psh a` / `pop a` (`0xC8` / `0xFD 0x8A`) around the reload is the general-purpose fix -- `pop a` does set Z too, but from the popped value itself, which is exactly what was pushed, so no information is lost; T's other bits (C/V/H/IE) are never touched by push/pop at all. Confirmed against `Core/CPU/LH5801/LH5801.cpp` in the `Calc-U-1600` sibling project (this user's own, not part of this repo) and exercised end to end in `examples/debug/instrquirks_1500a.asm`'s ADR test.
+
+---
+
 ## Instruction Set Reference
 
 ### Compact Instruction Summary
@@ -779,7 +825,9 @@ BCD addition between accumulator and memory, including carry. The operation:
 
 #### ADR — Add Register (16-bit)
 Adds the accumulator to the full 16-bit register pair. `RL + a → RL`, then `RH + C → RH`.
-**Flags:** C, V, H, Z may change (from the low-byte addition).
+
+**Flags: UNCHANGED — this contradicts the Sharp Technical Reference Manual's own text**, which documents ADR as publishing C/V/H/Z from the internal 8-bit low-byte addition (as this entry itself used to say). Real-hardware testing settled it the other way: silicon preserves the caller's flags across ADR, full stop. This was confirmed by a reproducible bug — the PC-1500's own ROM key-dispatch path relies on carry surviving an `adr y`/`rtn` pair to redraw the display correctly after Up/Down in PRO mode; an ADR that clobbers flags (as MAME's implementation still does, as of this writing) breaks that redraw. Treat any emulator/tool that clobbers C/V/H/Z on ADR as buggy, not the manual's description as authoritative.
+- Empirical test + write-up: sibling project `Calc-U-1600` (this user's own, not part of this repo), `examples/debug/adrtest_1500a.asm` (single-purpose: SEC then `adr x` with a guaranteed-no-carry add, reads carry back) and `examples/debug/instrquirks_1500a.asm` (broader 3-instruction test, see the DRL/DRR entries below); background in that project's `docs/Up-Down-Key-Investigation.md`, "The ADR conflict".
 
 | Format | Operation | Opcode | Bytes | Cycles |
 |---|---|---|---|---|
@@ -1352,11 +1400,22 @@ Shifts the accumulator right. Bit 0 moves into carry; 0 is shifted into bit 7.
 ---
 
 #### DRL — Digit Rotate Left
-Left rotation between the accumulator and memory at Xreg, in units of 4 bits (one BCD digit):
-- `a[3:0]` → `Mem[3:0]` (A low nibble stays in memory low)
-- `Mem[3:0]` → `Mem[7:4]` (memory low rotates to memory high)
-- `Mem[7:4]` → `a[7:4]` (memory high rotates into A high)
-- `a[7:4]` → (becomes new `Mem[3:0]` — A high moves to memory low)
+
+**✅ CONFIRMED on real PC-1500A hardware.** Three mutually incompatible readings of DRL/DRR existed across emulators; a real-silicon test settled it:
+
+With `a = 0x12` and `(Xreg) = 0x34` going in, DRL produces `a = 0x34`, mem `= 0x41`. That is **whole-byte swap: A becomes the entire old memory byte**; memory becomes a merge of its own old low nibble with A's old opposite nibble, and A's other old nibble is genuinely discarded, not conserved anywhere. The two readings this ruled out:
+
+| Reading | Seen in | `a` after DRL | mem after DRL | `a` after DRR | mem after DRR |
+|---|---|---|---|---|---|
+| **whole-byte swap (confirmed)** | MESS/MAME, PockEmul, forever1500, this project's own core | `0x34` | `0x41` | `0x34` | `0x23` |
+| 3-nibble rotate — **ruled out** | (an earlier guess in this project's own core, before this test) | `0x32` | `0x41` | `0x14` | `0x23` |
+| Z80 RLD/RRD semantics — **ruled out** | — | `0x13` | `0x42` | `0x14` | `0x23` |
+
+**Transfer diagram** (left rotation between the accumulator and memory at Xreg, in units of 4 bits / one BCD digit):
+- `Mem[old]` (the entire old byte) → `a` (A becomes the whole old memory byte, high nibble included)
+- `Mem[3:0]` (old) → `Mem[7:4]` (new) (memory's own old low nibble rotates up into its new high nibble)
+- `a[7:4]` (old) → `Mem[3:0]` (new) (A's old high nibble becomes the new memory low nibble)
+- `a[3:0]` (old) — discarded; not conserved anywhere
 
 **No flag changes.** Only operates on `(Xreg)` or `#(Xreg)`.
 
@@ -1365,14 +1424,19 @@ Left rotation between the accumulator and memory at Xreg, in units of 4 bits (on
 | `drl (x)` | ME0 | `0xD7` | 1 | 12 |
 | `drl #(x)` | ME1 | `0xFD 0xD7` | 2 | 16 |
 
+Confirmed by sibling project `Calc-U-1600` (this user's own, not part of this repo) running `examples/debug/instrquirks_1500a.asm` / `.bin` / `.pc1500a` on a real PC-1500A and PEEKing the result bytes — see that file's own header comment for the full discriminating-test writeup. `Core/CPU/LH5801/LH5801.cpp`'s `drlMerge`/`drrMerge` already implemented this reading (ported from source-level comparison against `pc1500emu` before this hardware test existed); the hardware run confirms that choice was correct.
+
 ---
 
 #### DRR — Digit Rotate Right
-Right rotation between the accumulator and memory at Xreg, in units of 4 bits:
-- `Mem[3:0]` → `a[3:0]` (memory low to A low)
-- `a[3:0]` → `Mem[7:4]` (A low to memory high)
-- `Mem[7:4]` → `Mem[3:0]` (memory high to memory low)
-- `a[7:4]` → (becomes new `Mem[7:4]` — A high moves to memory high)
+
+**✅ CONFIRMED on real PC-1500A hardware** — see the DRL entry immediately above for the full discriminating-test table and provenance. With `a = 0x12` and `(Xreg) = 0x34` going in, DRR produces `a = 0x34`, mem `= 0x23` — same whole-byte-swap reading as DRL. (DRR's own memory-byte result happens to be identical under all three readings that were considered, so DRL's accumulator result did the actual discriminating; DRR was captured alongside it as a direct cross-check.)
+
+**Transfer diagram** (right rotation between the accumulator and memory at Xreg, in units of 4 bits):
+- `Mem[old]` (the entire old byte) → `a` (A becomes the whole old memory byte, low nibble included)
+- `Mem[7:4]` (old) → `Mem[3:0]` (new) (memory's own old high nibble rotates down into its new low nibble)
+- `a[3:0]` (old) → `Mem[7:4]` (new) (A's old low nibble becomes the new memory high nibble)
+- `a[7:4]` (old) — discarded; not conserved anywhere
 
 **No flag changes.** Only operates on `(Xreg)` or `#(Xreg)`.
 
@@ -2433,7 +2497,7 @@ A PC-1500 assembly program invoked from BASIC (`CALL &addr`) is opaque to the us
 ### What the User Guide Must Cover
 
 1. **Purpose** — one paragraph: what the program does, what problem it solves.
-2. **Installation** — how to load into RAM (POKE sequence, CLOAD, or tape); which address range it occupies; whether it survives a `NEW` command (it will not if it lives in BASIC program memory).
+2. **Installation** — how to load into RAM (POKE sequence, `CLOADM`, or tape); which address range it occupies; whether it survives a `NEW` command (it will not if it lives in BASIC program memory).
 3. **Invocation** — exact BASIC command(s): e.g., `CALL &7800` or `CALL &7800,x`; any setup required before calling (variable values, mode).
 4. **Parameters and return values** — if called via `CALL addr,x`: what X must contain on entry; what X, Y, A contain on return; which BASIC variables are modified.
 5. **Keyboard controls** — if interactive: key-by-key table of what each key does.
@@ -2458,7 +2522,7 @@ Place this template as a comment block at the top of the `.asm` source file:
 ;   <One paragraph describing what the program does and what problem it solves.>
 ;
 ; INSTALLATION:
-;   Load via: POKE sequence / CLOAD / tape
+;   Load via: POKE sequence / CLOADM / tape
 ;   Address range: 0x<start> – 0x<end>  (<N> bytes)
 ;   Survives NEW: No / Yes (if loaded above BASIC program area)
 ;
