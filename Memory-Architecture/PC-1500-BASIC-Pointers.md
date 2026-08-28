@@ -39,8 +39,8 @@ Variables tracking the execution state of the BASIC interpreter.
 ## 4. Memory Limits and Status
 | Pointer | Start Address | Description |
 | :--- | :--- | :--- |
-| `RAM_ST` | `$7860` | **RAM Start:** High byte of the user-available RAM start. |
-| `RAM_END` | `$7A13` / `$7A33` | **RAM End:** High byte of the physical RAM limit. |
+| `RAM_ST` | `$7863` | **RAM Start:** High byte (page) of the first valid user-RAM address; low byte is implicitly `$00`. Hardware-verified: reads `&40` on a stock PC-1500A (RAM starts at `&4000`) and `&00` with a 16 KB expansion module in the low window. Matches the `256 * PEEK(&7863)` formula in `PC-1500-Address-Decoding.md` §5.4, and sits directly below `RAM_END` at `$7864`. (An earlier revision of this table listed `$7860` here with no confirmed backing — corrected.) |
+| `RAM_END` | `$7864` / `$7A13` / `$7A33` | **RAM End:** High byte (page) of the first *invalid* address — the physical RAM limit. The working pointer used by ROM `MEM` logic and by `examples/memtest_bank.asm` is `$7864`, sitting one byte above `RAM_ST`; `$7A13` / `$7A33` are the PC-1500A / PC2 copies. |
 | `WARM_START` | `$7A20` | **Warm Start Flag:** Must be `$01` for the system to skip the "NEW0?" cold start. |
 | `STK_SAVE` | `$7A21` | **Stack Save:** 16-bit pointer used to restore the system stack during a warm start. |
 
