@@ -239,7 +239,7 @@ Uses the module-hardware-confirmed assignment (§4.2a): RAM1/K0–K2 on the phys
 | 4 | RAM2 (Slot 1) / RAM1 (Slot 2) | Chip select for the respective slot's RAM banks |
 | 5 | PVOUT | Current PVOUT bank state (0 or 1), from I/O port 31H b0 |
 | 6 | MREQ | Z-80 memory request |
-| 15 | INH | Pull low to inhibit internal ROM (CS001/CS123), letting the module override internal memory |
+| 15 | INH | Inhibit internal ROM (CS001/CS123), letting the module override internal memory. **Polarity note:** PC-1600 TRM §7.2.2 says the ROM is inhibited by driving INH **high** — on the PC-1600 INH *is* the ROM's active-low OE, tied to ground by default. This is opposite to the PC-1500's "connect to GND to inhibit". See `../PC-1600/PC-1600-Memory-Bank-Switching.md` Part 4; not yet reconciled against a second source. |
 | 16–18 | S1/S2/S3 (Slot 1) or K0/K1/K2 (Slot 2) | Sub-select (Slot 1) / I/O-select (Slot 2) within the slot's address range |
 | 19 | PT | Bank select bit, from I/O port 31H |
 | 22–37 | A15–A0 | Full 16-bit Z-80 address bus |

@@ -57,6 +57,31 @@ Everything below is **derived research data** about the real hardware/firmware/s
 
 Documents that were **moved** here leave a one-line stub at their old location pointing back here. Documents that were **extracted** (only part of a larger tool-doc was relevant) leave the original file completely untouched elsewhere, with a note at the top of the copy here saying what was left out and why.
 
+### PC-1600/
+
+Machine-specific consolidation for the **Sharp PC-1600** (dual-CPU: Z-80-compatible SC7852 + LH5803 co-processor), aimed at building an emulator and at letting an agent write Z-80 machine-language programs and design expansion hardware for it. Its own [`PC-1600/README.md`](PC-1600/README.md) is the sub-index and tracks which documents are written vs. still stubs. **PC-1600 BASIC is *not* here** — it is a near-superset of PC-1500 BASIC and will be covered for both machines together in `SharpBasicReference/`, the BASIC prompt guide, and a shared token-code guide.
+
+| Document | Summary |
+|---|---|
+| `PC-1600-Memory-Bank-Switching.md` | Mechanism-level: chips, Port 31H/28H/3DH bank registers + truth tables, LR38041 gate array, chip selects, firmware transparent-banking calls, module headers, boot sequence, CE-1600M/1601M/superRAM, dual-CPU bridge, I/O range map, PC-1500-module adaptation, internal wiring. *(moved here from `Memory-Architecture/`)* |
+| `PC-1600-Memory-Architecture.md` | Narrative/comparison: Z-80 8-bank view, internal-RAM/`NEW`-offset layout, the LH5803 compatibility memory map, address-by-address comparison to PC-1500/1500A, MODE0/MODE1. *(moved here from `Memory-Architecture/`)* |
+| `PC-1600-Serial-Commands.md` | BASIC serial command reference: `INIT`, `SETCOM`, `OUTSTAT`, `INSTAT`, `SNDSTAT`, `RCVSTAT`, `SETDEV`, `PCONSOLE`, `SAVE`/`LOAD`. *(moved here from `Peripherals/`)* |
+| `PC-1600-Serial-Hardware-Notes.md` | RS-232C/SIO share one TC8576F UART (PRIM select, BX7269W level shifter, VDD/VEE, TC8576F pinout — TRM §7.6); plus the FTDI USB/UART wiring how-to and Apple-Silicon driver gotcha. *(moved here from `Peripherals/`)* |
+| `PC-1600-Machine-Overview.md` | *(first pass)* Chip complement, clock tree, dual main-CPU bus sharing, sub-CPU command protocol, power rails, power-on/boot (§3.5), peripheral catalogue (Ch 1). From TRM §7.1/§7.7/§3.5/Ch 1. |
+| `PC-1600-Work-Area-Map.md` | *(first pass)* The F000H–FFFFH BASIC/IOCS work area: 5-block structure, downward extension for peripheral ROM work areas + PTR1–PTRG, and the §6.3 named-variable map. From TRM Chapter 6. Complements `PC-1600-Memory-Bank-Switching.md` Part 6. |
+| `PC-1600-CPU-SC7852-Z80.md` | *(first pass)* The SC-7852 as a CPU: programmer's model, instruction set (= verbatim Zilog Z-80A), timing + the documented wait-state deviation, fixed-IM2 interrupts, RST vector map, the 100-pin terminal table, the 30–3FH control-register block, dual-CPU bus mapping. From TRM §7.1/§3.4/§5.13 + Systemhandbuch §10.4. |
+| `PC-1600-CPU-LH5803-Compat.md` | *(first pass)* LH-5803 memory map, LH-5801 deltas, full `CALLH` parameter block (TRM §5.14), MODE0/MODE1, PC-1500 compatibility rules (TRM §5.15). |
+| `PC-1600-IO-Ports.md` | *(first pass)* Range map + the LH-5810-compatible port block 10–1FH, TC8576F register select 20–27H, buzzer; BEEP + timer/RTC/analog IOCS (§3.9/§3.10). From TRM §7.9/§7.6/§7.5/§3.9. |
+| `PC-1600-Display-HD61202.md` | *(first pass)* Panel LF7204E (156×32 + 16 symbols), HD61203 + 2×HD61102, 217 kHz clock, CS→A2–A5 decode, frame-buffer model (TRM §7.3); plus the full §3.1 LCD IOCS routine set, work area, and 6×8 CG format. |
+| `PC-1600-IOCS.md` | *(in progress)* IOCS calling conventions (TRM §3 preamble) + master routine index for §3.1–§3.13. **Chapter 3 complete** (§3.1–§3.13). |
+| `PC-1600-Filesystem.md` | *(first pass)* File system (TRM §3.3): 16-byte file header, 57-byte FCB + 256-byte buffer, file IOCS routines (C = IOCS #, `CALL 01DEH`), and the FAT-style RAM-disk / floppy layout (boot sector, media-ID geometry, single-byte FAT). |
+| `PC-1600-Peripherals-Hardware.md` | *(in progress)* CE-1600P printer/plotter + CE-1600F floppy IOCS + peripheral hardware (TRM §3.7/§3.8/Ch 8). §3.7 printer + §3.8 floppy routines filled. |
+| `PC-1600-Keyboard.md` | *(hw complete)* Scan mechanism, strobe/sense wiring (TRM §7.4/§7.9); plus the full §3.2 key IOCS routines, the 9-strobe scan matrix, the §3.2.2 work area, and key-code translation/redefinition. Emulator-ready; §10.2 key-code table (agent-facing) pending. |
+| `PC-1600-Expansion-Bus.md` | *(stub)* Designing hardware for the 60-pin system bus + 40-pin memory slots: electrical, bus-cycle timing, IRQ/WAIT protocol, ROM-module header/autostart, worked example. |
+| `PC-1600-Memory-Modules.md` | *(stub)* Per-module catalogue: CE-1600M/1601M/1620M/1650M/superRAM + PC-1500-module adaptation. |
+| `PC-1600-Assembly-Guide.md` | *(stub)* Writing SC7852 machine-language programs: BASIC calling conventions, bank-aware code, ROM entry points, toolchain. |
+| `PC-1600-ROM-Disassembly.md` | Pointer to the external PC-1600 ROM reverse-engineering project |
+
 ### Memory-Architecture/
 
 | Document | Summary |
@@ -65,9 +90,7 @@ Documents that were **moved** here leave a one-line stub at their old location p
 | `PC-1500-Address-Decoding.md` | Address-decoder architecture and physical memory map for the PC-1500/1500A: Y0–Y3/S0–S7 blocks, physical RAM chips, the PC-1500→PC-1500A connector rewiring, the machine-language area, and RAM-sizing/`NEW`-offset calculations. |
 | `PC-1500-Bank-Switching.md` | How 16KB memory-expansion modules bank-switch into the PC-1500/1500A's low 16KB address window, built on top of `PC-1500-Address-Decoding.md`; also touches PC-1600 compatibility. |
 | `PU-PV-Signals.md` | PU/PV flip-flop pins on the LH5801 and their role in the PC-1500/1500A expansion connector. |
-| `PC-1600-Memory-Bank-Switching.md` | Full PC-1600 memory-extension and bank-switching analysis, sourced from the service manual and Systemhandbuch. |
-| `Expansion-Connectors.md` | Consolidated connector reference: the PC-1500's 40-pin and 60-pin connectors (the latter cross-validated pin-for-pin against the PC-1600's 60-pin connector), the PC-1500A's pin reassignment (and how far a fixed-wiring module can be pushed against it), and the PC-1600's 60-pin system bus and two memory-slot connectors. |
-| `PC-1600-Memory-Architecture.md` | PC-1600 bank switching and decoding narrative: the Z-80's 8-bank view, internal-RAM/`NEW`-offset layout, and how the same physical memory looks from the LH5803 in PC-1500-compatibility mode — with a direct comparison to the real PC-1500/1500A. |
+| `Expansion-Connectors.md` | Consolidated connector reference: the PC-1500's 40-pin and 60-pin connectors (the latter cross-validated pin-for-pin against the PC-1600's 60-pin connector), the PC-1500A's pin reassignment (and how far a fixed-wiring module can be pushed against it), and the PC-1600's 60-pin system bus and two memory-slot connectors. Raw pinouts the `PC-1600/` bus docs build on. |
 | `Software-Defined-Memory-Extension.md` | Hypothetical: what a microcontroller-based universal module would need to do on the wire to emulate every real PC-1500/1500A/1600 memory module (plus a few "maxed out" hypotheticals) — an enable-condition/bank-select reference table per module, with the four 40-pin slot layouts underneath. |
 
 ### Assembly-Programming/
@@ -90,8 +113,8 @@ Documents that were **moved** here leave a one-line stub at their old location p
 | Document | Summary |
 |---|---|
 | `CE-150-Plotter-Links.md` | Pointers to third-party replacement parts for the CE-150 plotter's pen mechanism. |
-| `PC-1600-Serial-Hardware-Notes.md` | Wiring notes for interfacing the PC-1600's built-in serial port with a modern FTDI USB/UART adapter, including an Apple Silicon Mac driver gotcha. |
-| `PC-1600-Serial-Commands.md` | Full reference for the PC-1600's serial BASIC commands: `INIT`, `SETCOM`, `OUTSTAT`, `INSTAT`, `SNDSTAT`, `RCVSTAT`, `SETDEV`, `PCONSOLE`, `SAVE`/`LOAD`. |
+
+The PC-1600 serial documents (`PC-1600-Serial-Commands.md`, `PC-1600-Serial-Hardware-Notes.md`) moved to `PC-1600/`.
 
 ### Data-Formats/
 

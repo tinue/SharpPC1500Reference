@@ -150,6 +150,58 @@ Each nibble frame: 1 start + 4 data + 6 stop = 11 bits.  Byte total = 22 bits.
 
 ## PC-1600
 
+> **Cross-reference — PC-1600 Technical Reference Manual §3.11** ("Tape Recorder").
+> The manual documents the same format from the firmware side and settles several field
+> meanings the encoder analysis below inferred. Summary of the manual's view:
+>
+> **§3.11.1 Mode 0 (native PC-1600) recording layout:**
+> `[Leader 8 s] [Header] [Space 2 s] [data] [Space 4 s]` for tokenized-BASIC / ML /
+> RESERVE; ASCII and text use repeated `[ASCII block] [Space 4 s]`; the "special" data
+> format interleaves `[Data-N status] [Space 8 s] [Data-N] [Space 4 s]` per record. `▼` /
+> `▲` in the manual's diagram = cassette-motor stop / start between blocks.
+>
+> **Mode 0 header (48 bytes), field semantics (§3.11.1[2]):** offset `00H` = *MODE-1
+> format byte* (`01H` ML, `02H` tokenized BASIC, `04H` ASCII, `08H` data); `01H`–`0BH` =
+> filename(8) + extension(3), left-justified, space-padded (`20H`); `0CH` = ML exec-start
+> **bank** after load (else `00H`); `0DH` = ML load-start **bank** (else `00H`); then a
+> `0DH` separator, the data size (low 16 bits L,H then a separate upper-8-bits byte for
+> ML/tokenized/RESERVE, `00H` for ASCII), the ML load-start address (L,H), and the ML
+> exec-start address after load (L,H — `FFFFH` together with header `1FH`=`FFH` means "no
+> entry point"); `≈1BH`–`1EH` = creation Month / Day / Hour / Minute (ranges 01–12 /
+> 01–31 / 00–23 / 00–59); `1FH` = *MODE-2 format byte* (`00H` ML, `01H` tokenized BASIC,
+> `02H` RESERVE, `04H` ASCII); `20H`–`2FH` reserved `00H`. This is the same 48-byte
+> header laid out byte-for-byte in §A below — the `File ID` at offset 0 is the MODE-1
+> byte, the `Sub-ident` at offset 24 is the MODE-2 byte, offsets 25–28 are the date/time,
+> and offsets 29–31 are the "upper 8 bits" extension bytes.
+>
+> **§3.11.2 Mode 1 (PC-1500/1500A-compatible) recording** uses the PC-1500 tape layout
+> (`Leader 8.01 s`, `Header`, `GAP 260 ms`, `Data Block`; data files interleave
+> `GAP 1026 ms` / status / `GAP 252 ms` / data), header `Dateimodus` `00H`/`01H`/`02H`/
+> `04H` = ML/BASIC/RESERVE/data, "Header Mark" nibble sequence `AH 10H 11H … 17H` — see
+> `PC-1500-Tape-Format.md`.
+>
+> **§3.11.3 tunable timing work area (Mode 0)** — firmware reads these before writing;
+> patching them changes the waveform:
+>
+> | Name | Addr | Default | Meaning |
+> |---|---|---|---|
+> | SHORT HIGH / SHORT LOW | F197H / F198H | 30 / 23 | high / low half-period of the SHORT (bit-0) pulse |
+> | LONG HIGH / LONG LOW | F199H / F19AH | 79 / 71 | high / low half-period of the LONG pulse |
+> | CHECK SUM | F19BH–F19CH | — | running checksum accumulator |
+> | INFORMATION LEADER / TRAILER | F19DH / F19EH | 80 / 20 | leader / trailer length around the header |
+> | INFORMATION SHORT 1 | F19FH–F1A0H | 10000 | header-gap SHORT-pulse count, 1st run |
+> | INFORMATION LONG 1 | F1A1H | 40 | header-gap LONG-pulse count, 1st run |
+> | INFORMATION SHORT 2 | F1A2H | 40 | header-gap SHORT-pulse count, 2nd run |
+> | DATA SHORT 1 | F1A3H–F1A4H | 11000 | data-block-gap SHORT-pulse count, 1st run |
+> | DATA LONG 1 | F1A5H | 20 | data-block-gap LONG-pulse count, 1st run |
+> | DATA SHORT 2 | F1A6H | 20 | data-block-gap SHORT-pulse count, 2nd run |
+>
+> These line up with the `bin2wav` analysis below: `INFORMATION SHORT 1` = 10000 ↔ the
+> "10 000 leading Bit0" sync; `INFORMATION LONG 1` / `SHORT 2` = 40 ↔ `SYNC_E_HEAD` = 40;
+> `DATA SHORT 1` = 11000 ↔ the longer inter-block Bit0 run (`bin2wav` observed 10 744).
+> The SHORT/LONG HIGH/LOW values are in the sub-CPU-timer ticks the firmware counts, not
+> WAV samples.
+
 ### A) Binary header prepended to raw `.img` data
 
 ```
