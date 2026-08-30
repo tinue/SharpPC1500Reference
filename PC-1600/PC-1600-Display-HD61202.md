@@ -61,13 +61,33 @@ bit map, not yet transcribed (see this doc's TODO).
   panel: the 32 graphics rows on each side plus the status line.
 - **2 × HD61102** — segment (column) drivers, labelled **IC2** and **IC3** on the board.
 
-The 156-dot width is split into three column blocks: **64 + 64 + 28 = 156**. From the
-TRM figure the HD61102s and HD61203 divide the panel roughly as: a left 64-dot block, a
-centre 64-dot block, and a right 28-dot block, each 32 rows tall, with the HD61203
-supplying X1–X32 / X33–X64 / X49–X64 groups and the status line fed separately (Y6f
-group). The exact segment-to-controller assignment isn't fully legible in the scan and
-should be confirmed against §3.1 / a real panel; what matters for emulation is the I/O
-interface below.
+The 156-dot width is split into three column blocks: **64 + 64 + 28 = 156**, confirmed
+2026-08-30 from the TRM's own LCD block diagram (Systemhandbuch, LCD: LF7204E), which
+gives the exact internal Y/X wiring, not just the block sizes:
+
+- **Left 64-dot block** (screen columns 0–63): driven by **IC2**'s `Y1–Y64` outputs.
+- **Centre 64-dot block** (columns 64–127): driven by **IC3**'s own `Y1–Y64` outputs,
+  labelled independently in the diagram.
+- **Right 28-dot block** (columns 128–155): driven by `Y1–Y28` — but **IC2's own label in
+  the diagram reads `Y1–Y66` total, not `Y1–Y64 + 28 more`**, i.e. IC2 has only 66
+  physical Y outputs. The wire for the right block traces back to the *same* `Y1–Y28`
+  bus as the left block's own first 28 outputs, not a separate 92nd-pin extension. **The
+  right 28-dot block is therefore not independently addressable: it always mirrors IC2's
+  own leftmost 28 columns (0–27).** This is the only reading consistent with a real
+  HD61102's column-address field being 6 bits (0–63) wide — IC2 has no way to address a
+  92nd distinct column, so sharing physical output pins across two locations on the glass
+  is the only explanation the diagram's own wiring supports.
+
+Row (common) driving: **1 × HD61203** supplies the panel's X (common) outputs — `X1–X32`
+into the left block, `X1–X32` into the centre block (IC3's own, a second/independent
+32-line group despite the same numbering), and `X33–X64` into the right block. Two
+further connections feed the **status-symbol line specifically**, distinct from the main
+32-row screen's own addressing: IC3's `Y6f` pin, and HD61203's `X49–X64` common-line
+group — both drawn in the diagram entering the panel at the status-line row, not the
+32-dot screen body. This is consistent with (though doesn't fully resolve) `PC1600StatusLine`
+being a separate mechanism from the graphics-area HD61102 ports — see §1.1 above; the
+status line's own *software-side* port/bit protocol (which `SMBLSET` value lights which
+segment) is still not given by this diagram and remains open (§6.3/TODO).
 
 ## 3. I/O interface
 
@@ -260,6 +280,10 @@ list.)
   still has one open cell: offset 3 (data *read*) was never exercised by the boot path
   traced so far — needs its own trace exercising `DOTREAD`/`GPTNREAD` or similar to
   confirm directly rather than by symmetry.
-- §2's three-column-block (64+64+28) segment-to-controller assignment is still
-  unconfirmed against real hardware — the port-decode trace above only exercises IC2/IC3
-  addressing, not which physical panel columns each maps to.
+- ~~§2's three-column-block (64+64+28) segment-to-controller assignment~~ — resolved
+  2026-08-30 from the TRM's own LCD block diagram, see §2 above (IC2's Y1-Y28 outputs
+  are shared between the left block's own first 28 columns and the entire right block).
+- The status-symbol line's Y6f/X49-X64 wiring (§2 above) is now confirmed as physically
+  separate from the main screen, but its *software* side — which port/value actually
+  drives Y6f or selects X49-X64 — is not given by the block diagram and remains open;
+  still needs TRM §3.1 p28's own bit map (see the first TODO item above).
