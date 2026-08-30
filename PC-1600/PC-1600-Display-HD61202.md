@@ -9,7 +9,10 @@ transcribed** — see "TODO" below.
 
 **Sources:** PC-1600 Technical Reference Manual §7.3 (LCD hardware), read from the German
 Systemhandbuch scan. §3.1 (IOCS routines for LCD, work area, character font) and §10.1
-(character-code table) pending.
+(character-code table) pending. §3's port/command decode additionally sourced from a
+headless trace of the genuine PC-1600 boot ROM (`romI-0.bin`/`romIV-6.bin`) executing
+against a from-scratch SC-7852 emulation, 2026-08-30 — the real firmware's own I/O
+behavior, not a description of it, so treated as primary alongside the TRM.
 
 ---
 
@@ -57,13 +60,39 @@ port number:
 
 (The 50H–53H overlap in the source table is as printed; the SC-7852 I/O-map page renders
 the split as "50H = HD61102 (IC2)+(IC3), 58H = IC3, 5BH = IC2" — i.e. within 50–5FH the
-A2/A3/A4/A5 combination picks controller + instruction/data + which half. Resolve the
-exact per-port decode against a real unit before relying on it for emulation.)
+A2/A3/A4/A5 combination picks controller + instruction/data + which half.)
 
-Within an HD61102 the standard register model applies (D/I line = instruction vs. data;
-commands: display on/off, set page 0–7, set Y address 0–63, set start line, read status
-with its busy flag; data auto-increments the Y address). The PC-1600 exposes that
-through the port-number bits rather than a dedicated D/I pin.
+**Command/data/status port assignment within each 4-port block, confirmed 2026-08-30 by
+a headless trace of the genuine PC-1600 boot ROM (`romI-0.bin`/`romIV-6.bin`) executing
+against a from-scratch SC-7852 emulation** (a primary source: the actual Sharp firmware
+running, not a secondary description of it): within a controller's 4-port block (IC3 =
+54H–57H, IC2 = 58H–5BH, "both" = 50H–53H), the **command register and the data register
+are two different ports, not one port with a D/I-selecting bit as this doc previously
+guessed**. The boot ROM was observed writing exclusively to the block's first and third
+port (offset 0 and offset 2 from the block's base — e.g. 54H and 56H for IC3) and reading
+exclusively from the block's second port (offset 1 — e.g. 55H for IC3, matching the
+already-documented busy-wait at `IN A,(55H)`/`IN A,(59H)`, §7 below and
+`PC-1600-CPU-SC7852-Z80.md` §5.2's cause list is unrelated to this): never a write to
+offset 1/3, never a read of offset 0/2. So:
+
+| Offset from block base | Direction | Register |
+|---|---|---|
+| +0 | write | command |
+| +1 | read | status |
+| +2 | write | data |
+| +3 | read | data (not yet directly observed in this trace — offset 1/read status is the only read this trace's boot path exercised; offset 3 is inferred by the write side's own +0/+2 symmetry, not independently confirmed) |
+
+Within the command register, three command-byte ranges were directly observed being
+written by the real ROM and, once decoded this way, produced a genuinely-lit real pixel
+in a from-scratch emulation running that same ROM (also a primary-source result — the
+effect of running the actual firmware, not a guess): **0x3E = display off / 0x3F =
+display on** (bit 0 selects — the ROM's very first-ever display write in a cold-boot
+trace is `0x3E` to the "both controllers" port, an ordinary display-off init step),
+**0xB8–0xBF = set page address** (low 3 bits = page 0–7, e.g. `0xBC`/`0xBE`/`0xBF`
+observed = pages 4/6/7), and **0x40–0x7F = set column address** (low 6 bits = column
+0–63, e.g. `0x7F`/`0x40` observed = columns 63/0). A fourth range, **0xC0–0xFF = set
+display start line**, was also written by the ROM (`0xC0` observed) but its effect was
+not independently exercised/confirmed by this trace.
 
 ## 4. Frame-buffer / addressing model
 
@@ -198,4 +227,10 @@ list.)
 - SMBLSET's per-symbol-set bit map (TRM §3.1 p28).
 - The character-*code* table (glyph assignments) — TRM §10.1. **Not needed by an emulator** (the ROM's own font tables, §8, do the rendering); useful for the program-writing agent.
 - Reconcile the `LINE`/`BOX` entry-address vs. the §3.1 example's `CALL &0124`.
-- Reconcile the CS1/CS2/CS3 → port decode (§3) against real hardware.
+- §3's command/data/status port split (offset 0/1/2 confirmed by ROM trace, 2026-08-30)
+  still has one open cell: offset 3 (data *read*) was never exercised by the boot path
+  traced so far — needs its own trace exercising `DOTREAD`/`GPTNREAD` or similar to
+  confirm directly rather than by symmetry.
+- §2's three-column-block (64+64+28) segment-to-controller assignment is still
+  unconfirmed against real hardware — the port-decode trace above only exercises IC2/IC3
+  addressing, not which physical panel columns each maps to.
