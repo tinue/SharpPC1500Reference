@@ -200,8 +200,35 @@ Call `CALL <entry>`. All addresses are in Bank 0. The character-mode routines op
 
 | Name | Entry | Function | Params |
 |---|---|---|---|
-| **SMBLSET** | 013CH | set the status-line symbols | B = symbol-set number 0–2 (each set covers a different group of the 16 symbols: DEF / small / SHIFT / BUSY / RESERVE / … — exact bit map from TRM §3.1 p28, not fully transcribed) |
+| **SMBLSET** | 013CH | set a symbol set into the state given by A | B = symbol-set number 0–2; A = 8-bit mask, 1 = ON (bit map below) |
 | **SMBLREAD** | 0139H | read the status-line state | — |
+
+**SMBLSET's bit map, confirmed 2026-08-30** from the TRM's own SMBLSET reference page
+(§3.1 p28; primary source, a photo of the manual page supplied by the project owner) —
+resolving the "not fully transcribed" gap this table previously carried. `A`'s 8 bits,
+MSB → LSB, per `B`:
+
+| B | b7 | b6 | b5 | b4 | b3 | b2 | b1 | b0 |
+|---|---|---|---|---|---|---|---|---|
+| 00H | DEF | I | II | III | SMALL | — | SHIFT | BUSY |
+| 01H | — | RUN | PRO | RESERVE | — | RAD | G | DE |
+| 02H | KBII | — | — | — | S | — | CTRL | Low battery |
+
+(`—` = unused/undefined in the TRM's own table.) TRM's own note: *"Wenn entweder KBII
+oder S auf 1 gesetzt ist, so wird das S Symbol angezeigt"* — "if either KBII or S is set
+to 1, the S symbol is shown": on real hardware there is exactly one printed "S" position,
+lit by either underlying cause; the "ローマ字→カナ" caption text this project's own
+photo measurement (§1.1) found next to it is most likely a static, permanently-printed
+explanation of what S means when lit, not a second independently-driven segment.
+
+**Storage location, cross-checked (not itself a TRM fact) against PockEmul's own
+`Lcdc_pc1600.cpp`** (`disp_symb()`/`SYMB1_1600..3_1600`, an emulator cross-check per this
+repo's own "Sources & validation" convention): these three bytes live in the *centre*
+HD61102 (the one covering screen columns 64–127, §2's "IC3")'s own column 63, at pages
+4 (B=02H), 6 (B=01H), and 7 (B=00H) — the SAME per-column storage §2/§4 already describe
+for the graphics area, just parked at one fixed column past the visible 32-row window's
+own pages 0–3. PockEmul's own indexing (`symbSL()`) also rotates this by the controller's
+`displaySL` register, the same rotation that governs the main screen's own scroll (§3).
 
 ### 6.4 Graphics
 
@@ -278,9 +305,8 @@ list.)
 
 ## TODO
 
-- SMBLSET's per-symbol-set bit map (TRM §3.1 p28) — which bit lights which of the 16
-  fixed-legend positions named in §1.1 (BUSY/SHIFT/S/SMALL/DEGRAD/RUNPRO/RESERVE/DEF/
-  I·II·III/CTRL/BATT).
+- ~~SMBLSET's per-symbol-set bit map~~ — resolved 2026-08-30 from the TRM's own SMBLSET
+  page (§3.1 p28), see §6.3 above.
 - The character-*code* table (glyph assignments) — TRM §10.1. **Not needed by an emulator** (the ROM's own font tables, §8, do the rendering); useful for the program-writing agent.
 - Reconcile the `LINE`/`BOX` entry-address vs. the §3.1 example's `CALL &0124`.
 - §3's command/data/status port split (offset 0/1/2 confirmed by ROM trace, 2026-08-30)
