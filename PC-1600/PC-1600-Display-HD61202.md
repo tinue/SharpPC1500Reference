@@ -28,6 +28,33 @@ behavior, not a description of it, so treated as primary alongside the TRM.
 - `VGG` keeps the HD61102s' display data alive across auto-power-off while the machine
   stays on.
 
+### 1.1 The status-symbol line is fixed-legend segments, not dot-matrix text
+
+**Confirmed 2026-08-30 from a photo of a genuine PC-1600 unit** (the physical hardware
+itself — as primary a source as the TRM). The 16 status positions are **printed legend
+text permanently etched on the LCD glass**, each with its own small individually-drivable
+segment, the same style as a scientific calculator's fixed "DEG/RAD/GRAD" mode strip —
+**not** glyphs the firmware draws into the 156×32 dot-matrix graphics area the way
+character/graphics mode does. Left to right, the printed legend reads:
+
+```
+BUSY  SHIFT  S[ローマ字→カナ]  SMALL  DEGRAD  RUNPRO  RESERVE  DEF  I II III  CTRL  BATT
+```
+
+("ローマ字→カナ" = "romaji→kana", a Japanese input-mode toggle, printed as part of the
+combined **S** legend.) Several printed labels appear to be single fixed captions with
+**two selectable positions each** rather than sixteen independent icons (matching
+"DEGRAD" being one legend that shows either DEG or RAD is active, "RUNPRO" showing
+either RUN or PRO, and "I II III" being three positions sharing one concept — likely a
+memory-area indicator): this is consistent with a "16 symbols" count without there being
+sixteen visually-separate icons. **This resolves why the DEG/PRO/I indicators an actual
+boot shows never appear in an emulation that only ever draws into the 156×32 dot-matrix
+area**: they are architecturally a completely separate display region from that area,
+driven by whatever discrete segment lines the HD61203/gate array expose for this strip —
+not more page/column-addressed HD61102 writes. **Still needed**: the actual per-segment
+port/bit mapping (which `SMBLSET` bit lights which named position) — TRM §3.1 p28's own
+bit map, not yet transcribed (see this doc's TODO).
+
 ## 2. Controller topology (TRM §7.3)
 
 - **1 × HD61203** — common (row) driver. Provides the X (common) outputs across the
@@ -224,7 +251,9 @@ list.)
 
 ## TODO
 
-- SMBLSET's per-symbol-set bit map (TRM §3.1 p28).
+- SMBLSET's per-symbol-set bit map (TRM §3.1 p28) — which bit lights which of the 16
+  fixed-legend positions named in §1.1 (BUSY/SHIFT/S/SMALL/DEGRAD/RUNPRO/RESERVE/DEF/
+  I·II·III/CTRL/BATT).
 - The character-*code* table (glyph assignments) — TRM §10.1. **Not needed by an emulator** (the ROM's own font tables, §8, do the rendering); useful for the program-writing agent.
 - Reconcile the `LINE`/`BOX` entry-address vs. the §3.1 example's `CALL &0124`.
 - §3's command/data/status port split (offset 0/1/2 confirmed by ROM trace, 2026-08-30)
