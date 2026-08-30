@@ -82,25 +82,46 @@ sub-CPU stays powered on the `VGG` rail while the machine is off
 
 Strobe line (`KS`*n* = `OPA` bit *n*, plus `PB6`) × sense bit (the byte returned by an
 `IN 37H`). A pressed key at (strobe, bit) pulls that sense bit to 0 while its strobe is
-low. The table is the TRM §3.2.1 `KEYSTRB` figure with a handful of OCR misreads in the
-scan corrected by cross-check (`$`→`F4`, `#`→`F3`, `+`/`*` ↔ `−`/`✻`, `ö`→`O`,
-`•`/`—`/`⇕` → `.`/`-`/`RSV`; `README.md`, *Sources & validation*). `KEYSTRB`'s "strobe
-number" 0–7 == the `KS` line index; its "strobe 8" == the `PB6` strobe.
+low. The table is the TRM `KEYSTRB` figure (previously cited here as §3.2.1, which a TRM
+cross-check identifies as "IOCS Routines for Key Input" instead -- the actual section
+number for this figure is unconfirmed; re-check against the TRM's table of contents) with
+a handful of OCR misreads in the scan corrected by cross-check (`$`→`F4`, `#`→`F3`,
+`+`/`*` ↔ `−`/`✻`, `ö`→`O`, `•`/`—` → `.`/`-`; `README.md`, *Sources & validation*).
+`KEYSTRB`'s "strobe number" 0–7 == the `KS` line index; its "strobe 8" == the `PB6`
+strobe.
+
+**KS1 bit7 correction (2026-08-30):** previously read here as `RSV` (an OCR
+"correction" of a misread `⇕` glyph -- see the git history of this line). Confirmed
+wrong two ways: the ROM's own key-code table (`KYCDTB`, bank 6 @ 94FBH in
+`PC1600-romIV-6.bin`) has byte `09H` at this exact matrix slot, which is the KEYDIRECT
+key code for the rocker (⇕) per the TRM's §10.2 key-code figure -- not a code that
+appears anywhere in that figure for "RSV"/Reserve. The PC-1600 schematic's keyboard
+matrix diagram independently draws this position with the same double-headed-arrow
+glyph as the adjacent `↑` key, not a distinct "RSV" label. `RSV`/"Reserve" is a RAM
+control flag (`KEYWK3` b1, "suppress auto-power-off," §6) with no keycap of its own --
+it doesn't appear in the KEYDIRECT code table at all. The table below has been corrected
+to `⇕` (rocker).
+
+**KS6 bit2 correction (2026-08-30):** previously read here as `CLS`, another
+single-occurrence OCR slip in this same transcription pass -- the KEYDIRECT code table
+(§10.2) has `CL` (code 18H) at this position, not `CLS`, and the project owner confirms
+the physical keycap is labeled `CL` on both PC-1500 and PC-1600. Corrected below.
 
 | Strobe | bit0 (LSB) | bit1 | bit2 | bit3 | bit4 | bit5 | bit6 | bit7 (MSB) |
 |---|---|---|---|---|---|---|---|---|
 | **KS0** (OPA b0) | `2` | `5` | `8` | `H` | `SHIFT` | `Y` | `N` | `↑` |
-| **KS1** (OPA b1) | `.` | `-` | `OFF` | `S` | `F1` | `W` | `X` | `RSV` |
+| **KS1** (OPA b1) | `.` | `-` | `OFF` | `S` | `F1` | `W` | `X` | `⇕` (rocker) |
 | **KS2** (OPA b2) | `1` | `4` | `7` | `J` | `F5` | `U` | `M` | `0` |
 | **KS3** (OPA b3) | `)` | `L` | `O` | `K` | `F6` | `I` | `(` | `ENTER` |
 | **KS4** (OPA b4) | `+` | `*` | `/` | `D` | `F2` | `E` | `C` | `RCL` |
 | **KS5** (OPA b5) | `=` | `←` | `P` | `F` | `F3` | `R` | `V` | `SPACE` |
-| **KS6** (OPA b6) | `→` | `MODE` | `CLS` | `A` | `DEF` | `Q` | `Z` | `SML` |
+| **KS6** (OPA b6) | `→` | `MODE` | `CL` | `A` | `DEF` | `Q` | `Z` | `SML` |
 | **KS7** (OPA b7) | `3` | `6` | `9` | `G` | `F4` | `T` | `B` | `↓` |
 | **PB6** (OPB b6) | `CTRL` | `KBII` | `BS` | — | — | — | — | — |
 
-`ON` is not in this matrix (§2). `SML` = small/kana lock, `RSV` = RESERVE, `KBII` = the
-second keyboard (international) shift.
+`ON` is not in this matrix (§2). `SML` = small/kana lock, `⇕` = the up/down rocker switch
+(distinct from the separate `↑`/`↓` arrow keys -- see the KS1 bit7 correction note
+above), `KBII` = the second keyboard (international) shift.
 
 ## 6. Keyboard work area (TRM §3.2.2)
 
@@ -132,17 +153,39 @@ user tables in RAM redefines the keyboard. Each table must lie entirely within o
 | Table | Purpose | Address ptr | Bank ptr | ROM source label |
 |---|---|---|---|---|
 | Key-code | matrix → key code | F120H–F121H (2 B, L/H) | F11FH (1 B) | `KYCDTB` |
-| SHIFT-code | key code → SHIFT code | F085H–F086H (2 B) | F084H (1 B) | `SFTCDT` |
-| KBII-code | key code → KBII code | F088H–F089H (2 B) | F087H (1 B) | `KNCDT1` |
-| SHIFT-KBII-code | key code → SHIFT-KBII code | F08BH–F08CH (2 B) | F08AH (1 B) | `KNCDT2` |
+| SHIFT-code | key code → SHIFT code | F084H–F085H (2 B, L/H) | F086H (1 B) | `SFTCDT` |
+| KBII-code | key code → KBII code | F087H–F088H (2 B, L/H) | F089H (1 B) | `KNCDT1` |
+| SHIFT-KBII-code | key code → SHIFT-KBII code | F08AH–F08BH (2 B, L/H) | F08CH (1 B) | `KNCDT2` |
 
-> The SHIFT/KBII/SHIFT-KBII pointer addresses above follow the **§3.2.2** work-area
-> layout (bank byte first, then the 2-byte address, mirroring the key-code table's
-> F11FH/F120H). The **§3.2.6** table instead labels F084H/F087H/F08AH as the *address*
-> low byte and F086H/F089H as the *bank* — the two sections disagree on byte roles for
-> these three tables (they agree on the key-code table). Trust §3.2.2 until checked
-> against the ROM; §3.2.6 also prints F089H twice (KBII and SHIFT-KBII bank), an evident
-> slip.
+> **Resolved against the ROM, 2026-08-30 — §3.2.6 is right, §3.2.2 is not.** An earlier
+> version of this table followed §3.2.2's work-area layout (bank byte *first*, then the
+> 2-byte address, mirroring the key-code table's own F11FH/F120H) and carried a note to
+> trust it "until checked against the ROM". It has now been checked. The table-selection
+> code in `PC1600-romIII-3.bin` at 4947H–495FH reads, for each of the three tables, the
+> **bank from the third byte** and the **address from the first two**:
+>
+> ```
+> 4947: 21 86 F0   LD HL,F086H     ; SHIFT     bank
+> 494A: 56         LD D,(HL)
+> 494B: 2A 84 F0   LD HL,(F084H)   ; SHIFT     address (L then H)
+> 4950: 21 89 F0   LD HL,F089H     ; KBII      bank
+> 4953: 56         LD D,(HL)
+> 4954: 2A 87 F0   LD HL,(F087H)   ; KBII      address
+> 4959: 21 8C F0   LD HL,F08CH     ; SHIFT-KBII bank
+> 495C: 56         LD D,(HL)
+> 495D: 2A 8A F0   LD HL,(F08AH)   ; SHIFT-KBII address
+> ```
+>
+> i.e. address-then-bank for these three, the opposite order from the key-code table's
+> own bank-then-address — the inconsistency is real, not a transcription artifact. The
+> live values a booted machine leaves in those slots corroborate it: SFTCDT = 953FH,
+> KNCDT1 = 9592H, KNCDT2 = 95E5H, all bank 06H — three plausible, evenly-spaced table
+> addresses sitting just past `KYCDTB` itself (94FBH, bank 06H). Read with §3.2.2's
+> layout the same bytes decode as banks 3FH/92H/E5H and the address 0695H three times
+> over, which is nonsense.
+>
+> §3.2.6's one genuine slip stands: it prints F089H twice (as both the KBII and the
+> SHIFT-KBII bank). The SHIFT-KBII bank byte is **F08CH**, per 495CH above.
 
 The `KEYSTAT` BASIC-command extension (TRM §5.3) is another route to these settings —
 cross-reference when §5 is processed.
