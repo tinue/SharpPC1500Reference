@@ -68,15 +68,22 @@ gives the exact internal Y/X wiring, not just the block sizes:
 - **Left 64-dot block** (screen columns 0–63): driven by **IC2**'s `Y1–Y64` outputs.
 - **Centre 64-dot block** (columns 64–127): driven by **IC3**'s own `Y1–Y64` outputs,
   labelled independently in the diagram.
-- **Right 28-dot block** (columns 128–155): driven by `Y1–Y28` — but **IC2's own label in
-  the diagram reads `Y1–Y66` total, not `Y1–Y64 + 28 more`**, i.e. IC2 has only 66
-  physical Y outputs. The wire for the right block traces back to the *same* `Y1–Y28`
-  bus as the left block's own first 28 outputs, not a separate 92nd-pin extension. **The
-  right 28-dot block is therefore not independently addressable: it always mirrors IC2's
-  own leftmost 28 columns (0–27).** This is the only reading consistent with a real
-  HD61102's column-address field being 6 bits (0–63) wide — IC2 has no way to address a
-  92nd distinct column, so sharing physical output pins across two locations on the glass
-  is the only explanation the diagram's own wiring supports.
+- **Right 28-dot block** (columns 128–155): driven by `Y1–Y28`. **IC2's own label in the
+  diagram reads `Y1–Y66` total** (not `Y1–Y64 + 28 more`), which a first reading took to
+  mean IC2 has only 66 physical Y outputs and the right block is a bare duplicate of the
+  left block's own first 28 columns, sharing physical pins — **that reading is not
+  reliable and is contradicted by an independent emulator's own working implementation**
+  (PockEmul's `src/lcd/Lcdc_pc1600.cpp`, `disp()` — an emulator cross-check per this
+  repo's own "Sources & validation" convention, not a TRM-confirmed fact): its renderer
+  treats the right block as reading the *same* per-column storage as the left block but
+  from an independent, otherwise-hidden set of pages/rows of that storage — genuinely
+  separate, individually-addressable pixels, not a duplicate. A real HD61102's per-column
+  storage is commonly taller than the visible window (a "display start line" register
+  selects which window is shown), which would make room for exactly this without needing
+  a 92nd physical output pin — but the TRM diagram's own `Y1–Y66` wording doesn't itself
+  spell this mechanism out, so exactly how that number reconciles with an
+  independently-addressable right block is still open, flagged here rather than resolved
+  by the diagram alone.
 
 Row (common) driving: **1 × HD61203** supplies the panel's X (common) outputs — `X1–X32`
 into the left block, `X1–X32` into the centre block (IC3's own, a second/independent
@@ -280,9 +287,12 @@ list.)
   still has one open cell: offset 3 (data *read*) was never exercised by the boot path
   traced so far — needs its own trace exercising `DOTREAD`/`GPTNREAD` or similar to
   confirm directly rather than by symmetry.
-- ~~§2's three-column-block (64+64+28) segment-to-controller assignment~~ — resolved
-  2026-08-30 from the TRM's own LCD block diagram, see §2 above (IC2's Y1-Y28 outputs
-  are shared between the left block's own first 28 columns and the entire right block).
+- ~~§2's three-column-block (64+64+28) sizes~~ — resolved 2026-08-30 from the TRM's own
+  LCD block diagram, see §2 above. The right block's exact internal wiring is only
+  partly resolved by that diagram, though: it behaves as independently-addressable pixels
+  (confirmed against PockEmul's own working renderer, an emulator cross-check, not a TRM
+  fact) rather than a duplicate of the left block, but the diagram's own `Y1-Y66` label
+  doesn't itself explain the mechanism -- still open, see §2's own note.
 - The status-symbol line's Y6f/X49-X64 wiring (§2 above) is now confirmed as physically
   separate from the main screen, but its *software* side — which port/value actually
   drives Y6f or selects X49-X64 — is not given by the block diagram and remains open;
