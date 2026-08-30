@@ -229,7 +229,10 @@ events the sub-CPU itself raises, all of which funnel into port-32H/35H **bit 6*
 ## TODO
 
 - §3.4: exact edge/level behaviour of 32H (cause) / 35H (mask) — reconcile the two
-  interrupt layers (port 35H bit 6 ↔ §7.1 sub-CPU bitfield).
+  interrupt layers (port 35H bit 6 ↔ §7.1 sub-CPU bitfield). **Bit 4 resolved
+  (2026-08-30, Systemhandbuch §7.3/§7.4):** a plain free-running 64 Hz, 50%-duty square
+  wave from the sub-CPU's Z6 pin (INT4/PB5), not edge-latched — see
+  `PC-1600-CPU-SC7852-Z80.md` §5.2. Bits 0-3/5-7 still open.
 - §3.9: the SWRT/SRRT RTC param-block byte layout; the ADC value range/scaling for
   SRA0/SRA1/SRA2; the SWPON power-on-condition mask bits.
 - §3.6.2 / §7.6: TC8576F parameter-register and command-byte formats.
