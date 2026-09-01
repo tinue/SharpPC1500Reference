@@ -114,9 +114,11 @@ Plain 3-bit binary value of b6:b5:b4, PVOUT/b0 and PT/PU (which are b1/b2, page-
 | Address Range | Bank 0 | Bank 1 | Bank 2 | Bank 3 |
 |---------------|--------|--------|--------|--------|
 | 0000-3FFF | System ROM (CS001) **NEVER SWITCHED OUT** | (Slot 2) | -- | -- |
-| 4000-7FFF | System ROM (BASIC, Editor) | Slot 2 ROM | Slot 1 ROM | System ROM (CS24, sub-banked 2x8K) |
+| 4000-7FFF | System ROM (BASIC, Editor) | "Slot 2 ROM" † | "Slot 1 ROM" † | System ROM (CS24, sub-banked 2x8K) |
 | 8000-BFFF | Slot 1a (RAM2) | Slot 1b (RAM2) | Slot 2a (RAM1) | Slot 2b (RAM1) |
-| C000-FFFF | Internal 16KB RAM (RAM3) | **`b7`=1: not confirmed.** An earlier revision left this cell as "(Bank 1)", an acknowledged unknown; an independent emulator implementation routes `b7`=1 to the external 60-pin system-bus connector rather than any local RAM (so what is there depends on what is attached). Not cross-checked against the service manual. | -- | -- |
+| C000-FFFF | Internal 16KB RAM (RAM3) | **`b7`=1: not confirmed.** An earlier revision left this cell as "(Bank 1)", an acknowledged unknown; the *only* source is one emulator's source code (PockEmul), which routes `b7`=1 to the external 60-pin system-bus connector rather than any local RAM (so what is there depends on what is attached). No Sharp manual (TRM, Service Manual, German user manual) reviewed for this project says what `b7`=1 maps to at C000–FFFF — the TRM §7.2.1 table only lists `b7` as a "bank 0/1" select for the page without describing bank 1's contents. Treat as: **low-confidence, single-source, plausible.** It is also the rarely-exercised path in practice — `b7`=1 swaps out the F000–FFFF IOCS/BASIC work area (`PC-1600-Work-Area-Map.md`), so the firmware only ever does it transiently, if at all. | -- | -- |
+
+**† The "Slot 2 ROM" / "Slot 1 ROM" labels for 4000–7FFF banks 1/2 do NOT mean a card in the CN-7/CN-8 memory bay answers there — now confirmed at schematic level.** Part 4's chip-select table decodes the entire 4000–7FFF window with **CS24** alone (SC7852 pin 45), and Part 12 wires CS24 only to the internal Memory-PWB ROM (IC5) — it never reaches the slot connectors. The **CE-1600M schematic** (Sharp's own 32KB RAM module, Part 7) and the **CE-1620M schematic** (Sharp's 32KB ROM cartridge for the memory bay) both tie their chip-enable to connector **pin 4 (RAMSN = RAM1#/RAM2#)**, which the gate array asserts only for the **8000–BFFF** window. Neither module has any connector signal telling it a 4000–7FFF access is in progress, and neither wires PU (pin 3) or PT (pin 19) at all. Memory-bay module headers are at 8000H/A000H/B000H (Part 6), i.e. page 2, matching. The one concrete 4000–7FFF ROM device, the CE-1600P (bank 4), is a **60-pin system-bus** unit. The firmware's "Page-1 module / EXROM at offset 4000H or 6000H, banks 1–7" machinery (Part 6: F0AEH/F0AFH bitmaps, EXROM1–EXROME, `CALL 02DFH` Creg 01–0E) is real but belongs to the **60-pin system bus**, not the 40-pin memory slots. **For an emulator: memory-slot connectors are consulted only for 8000–BFFF accesses; never route 4000–7FFF through them.** (Resolved sub-point: PU/PT are the 4000–7FFF field bits b1/b2 — Part 2's corrected model — and simply go unused by the 32KB memory modules; the "PVOUT operates in the 8000–BFFF window" readings in Part 7a/Part 10 refer to the *connector pin* named PVOUT, which carries **b4** — the LSB of the 8000–BFFF bank field — not the Port 31H bit b0 that shares the name. See Part 7's connector table.)
 
 Additional banks in 4000-7FFF:
 
@@ -440,9 +442,30 @@ ROM modules can allocate working memory via `CALL 02DFH`. Parameters: DE = size 
 - CR2032 lithium battery
 - DIP switch (configuration)
 
+### Connector Wiring (from the CE-1600M *Schaltplan*)
+
+The 40-pin slot connector, as actually wired on the module ("Battery side" pins 1–20, "Memory side" pins 21–40):
+
+| Pin | Signal | | Pin | Signal |
+|---|---|---|---|---|
+| 1 | VCC | | 24 | A13 |
+| 4 | **RAMSN** (RAM1#/RAM2#) | | 25–36 | A12 … A1 |
+| 5 | **PVOUT** | | 37 | A0 |
+| 6 | MREQ | | 38 | RD# |
+| 7–14 | D7 … D0 | | 39 | WR# |
+| 20 | VGG | | 40 | GND |
+
+**Not connected on this module:** pin 2 (PVIN), pin 3 (PU), pin 15 (INH), pins 16–18 (K0–K2), pin 19 (PT), pins 22–23 (A14/A15). A 32KB memory module needs none of them.
+
 ### Circuit Description
 
-The TC74HC139F dual decoder selects one of four 8KB SRAMs based on address lines from the slot connector. Its enable/select inputs come from the slot's bank signals, and its active-low outputs each enable one SRAM chip.
+The `TC74HC139F` (one half of the dual 2-to-4 decoder) takes select inputs **{A13, PVOUT}** and enable **`1G` = RAMSN**; its four active-low outputs each drive one 8KB SRAM's chip-enable. So:
+
+- **RAMSN** (pin 4) — the whole-module enable. The gate array asserts it only when the Z-80 addresses **8000–BFFF** and the Port 31H page-2 bank field points at this slot (banks 0/1 → Slot 1's RAM2#; banks 2/3 → Slot 2's RAM1#). There is no 4000–7FFF path.
+- **PVOUT** (pin 5) — the module's **A14-equivalent**: which 16KB half (= which of the slot's two banks). This is connector-pin PVOUT = Port 31H **b4** (LSB of the 8000–BFFF field), *not* the identically-named Port 31H bit b0 (which is the 0000–3FFF / LH5803-PV bit and does not reach this pin). `{PVOUT, A13}` together pick 1 of 4 chips.
+- **A0–A13** (pins 24–37) — address within the 16KB window. A14/A15 from the connector are unused; the module's 15th address bit is PVOUT.
+
+The `CE-1620M` (32KB ROM cartridge, `27C256`) uses the same scheme: CE ← RAMSN, A0–A13 ← connector, **A14 ← PVIN (pin 2)** — the pass-through counterpart of PVOUT. It too maps at 8000–BFFF.
 
 ### Memory Maps
 

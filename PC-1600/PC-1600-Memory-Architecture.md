@@ -30,6 +30,36 @@ This is consistent with, and confirms, the bank table already in `PC-1600-Memory
 
 ---
 
+## 2a. Reconciling the Two TRM Figures, the (A)/(B)/(C)/(D) Labels, and "Page B"
+
+**The apparent page-16-vs-page-17 contradiction is a prose oversimplification, not a real conflict.** (Page numbers here are the Holtkötter PDF's page count, matching how this discussion was raised.) The TRM's memory-map *figure* (PDF p.16, reproduced structurally in §2) is authoritative and correct: Bank 0's 0000–7FFF is 32 KB of internal system ROM — the CS001 ROM, which `PC-1600-Memory-Bank-Switching.md` Part 4 flags *"NEVER SWITCHED OUT"* — not RAM. The paragraph on PDF p.17 that says *"Die ersten vier Bänke sind dem RAM zugeordnet"* ("the first four banks are allocated to RAM") is a loose paraphrase that only holds for the *upper* half of banks 0–3 (8000–FFFF): every bank that contains **any** RAM is one of banks 0–3, but banks 0–3 are not all RAM. The 0000–7FFF half of every bank is ROM or unused; RAM begins at 8000 (module RAM) and at C000 (the fixed internal 16 KB).
+
+Concretely, for Bank 0: 0000–7FFF = internal ROM, 8000–BFFF = Slot 1 module RAM (if present), C000–FFFF = internal 16 KB RAM. The figure on p.16 has it right; the sentence on p.17 is imprecise and should not be read as "banks 0–3 are RAM".
+
+**The (A)/(B)/(C)/(D) labels, and references like "Page B, bank 1" — two incompatible conventions are in circulation. Disambiguate before answering.**
+
+1. **TRM p.16 figure convention** — A/B/C/D quarter the *8000–BFFF module-RAM window* (one label per bank × slot). Here "Page B" = Slot 1b RAM. Table below.
+2. **CPU-page convention** (used by at least one emulator effort) — A/B/C/D name the four 16 KB *CPU pages*: A = 0000–3FFF (page 0), **B = 4000–7FFF (page 1)**, **C = 8000–BFFF (page 2)**, D = C000–FFFF (page 3). Here "Page B, bank 1" = the 4000–7FFF window with Port 31H's page-1 field = 1, which `PC-1600-Memory-Bank-Switching.md` Part 1's summary table *labels* "Slot 2 ROM"; "Page C" = Slot 2 RAM at 8000–BFFF.
+
+   **Do not confirm a "route Page B through the Slot 2 connector, same as Page C" claim — it is wrong, now at schematic level.** The **CE-1600M** (Sharp's 32KB RAM module) and **CE-1620M** (Sharp's 32KB ROM cartridge) schematics both tie their chip-enable to connector **pin 4 (RAMSN)**, which the gate array asserts only for **8000–BFFF** accesses routed to that slot; neither module has any signal for a 4000–7FFF access, and neither even wires PU (pin 3) or PT (pin 19). The 4000–7FFF window is decoded internally by **CS24** → Memory-PWB ROM only (Part 4/Part 12). The firmware's EXROM / "Page-1 module at 4000H/6000H" concept (Part 6) is real but belongs to the **60-pin system bus**, not the memory slots — the one real 4000–7FFF ROM device (CE-1600P) is exactly such a 60-pin unit. Correct handling for an emulator: the memory-slot connector objects are consulted **only** for 8000–BFFF accesses; 4000–7FFF banks 1–7 are open bus unless internal ROM is mapped there. Resolved along the way: PU/PT are the 4000–7FFF field bits b1/b2 and simply go unused by the 32KB memory modules; connector-pin "PVOUT" is Port 31H **b4** (the 8000–BFFF field's LSB / 16KB-half select), a different net from the like-named bit b0 (`PC-1600-Memory-Bank-Switching.md` Part 7 connector table).
+
+The tell for which convention is in play: "Page C" used for Slot 2 RAM, or "b7" named ⇒ convention 2 (CPU pages). A bare reference with no such context ⇒ assume convention 1 (the TRM figure), below.
+
+**Convention 1 — the TRM figure's 8000–BFFF quarters:**
+
+| TRM label | This project's name | Physical slot | Z-80 window | Bank (Port 31H page-2 field b6:b5:b4) | Contents |
+|---|---|---|---|---|---|
+| (A) | Slot 1a | Slot 1 | 8000–BFFF | Bank 0 (`000`) | Lower 16 KB of a Slot 1 module |
+| (B) | Slot 1b | Slot 1 | 8000–BFFF | Bank 1 (`001`) | Upper 16 KB of a full-size (32 KB) Slot 1 module |
+| (C) | Slot 2a | Slot 2 | 8000–BFFF | Bank 2 (`010`) | Lower 16 KB of the Slot 2 module's currently-selected 32 KB vertical bank |
+| (D) | Slot 2b | Slot 2 | 8000–BFFF | Bank 3 (`011`) | Upper 16 KB of that same vertical bank |
+
+So **"Page B, bank 1" = Slot 1b**: the upper 16 KB aperture of a full-size Slot 1 RAM module, mapped at Z-80 8000–BFFF whenever Port 31H's page-2 field selects bank 1. It is not a memory region distinct from anything else discussed here — it is one of these four module sub-windows, and it is module RAM (Slot 1), directly usable as program/expansion memory (§4a). The letter and the bank number are redundant: the figure fixes (A)→bank 0, (B)→bank 1, (C)→bank 2, (D)→bank 3, so "Page B" alone already implies bank 1.
+
+**Why the figure also shows a *(C)* at 4000–7FFF in bank 1.** The firmware has an EXROM / "Page-1 module at offset 4000H or 6000H, banks 1–7" concept (F0AEH/F0AFH bitmaps, EXROM1–EXROME, `CALL 02DFH` Creg 01–0E — `PC-1600-Memory-Bank-Switching.md` Part 6), and the p.16 figure's label reflects that firmware model. **It does not follow that a card in the CN-7/CN-8 memory bay drives the 4000–7FFF window** — see the Part 1 footnote †: the wiring decodes this window with CS24 (internal Memory-PWB ROM only), the slots' pin-4 select is 8000–BFFF only, and memory-bay module headers sit at 8000H/A000H/B000H (page 2). Where 4000–7FFF ROM genuinely exists (CE-1600P, bank 4) it arrives via the **60-pin system bus**, a different connector with its own decode. So, reliably: module **RAM** is page 2 (8000–BFFF), Slot 1 → banks 0/1, Slot 2 → banks 2/3 (× Port 28H vertical bank). Module **ROM** at page 1 is a firmware-level model whose physical path the corpus does not tie to the memory slots. "Modules occupy 4 slots, 8000–BFFF, banks 0–3" describes the RAM side — the four A/B/C/D blocks — and Slot 2's 32 KB of that is a single vertical bank of up to eight.
+
+---
+
 ## 3. Internal RAM (Bank 0, C000–FFFF): Structure and the PC-1500(A) Parallel
 
 The TRM's internal-RAM figure lays out Bank 0's C000–FFFF exactly as follows:
@@ -86,6 +116,17 @@ Two things worth noting:
 - **CE-1600M's program area spans two banks** (Bank 2's 80C5H–BFFFH, continuing into Bank 3's 8000H–8FFFH with no further +C5H offset, since it's a continuation of the same allocation, not a new base) — directly confirming that a &5000-byte (~20KB) `NEW` allocation on a 32KB module can straddle the Slot 2a/Slot 2b bank boundary transparently from BASIC's perspective, exactly as the underlying two-bank Slot 2 hardware (`PC-1600-Memory-Bank-Switching.md` Part 1) would predict.
 
 This C5H-offset convention is identical in spirit to the PC-1500/1500A's own module-`NEW`-offset practice (`PC-1500-Address-Decoding.md` §5.4, §5.5) — allocate the fixed reserve first, then give BASIC/ML the rest — just generalized here to name which of three physical targets (S0/S1/S2) the reserve applies to, since the PC-1600 (unlike the PC-1500/1500A) has two independent module slots plus internal RAM, all needing this same bookkeeping simultaneously.
+
+---
+
+## 4a. Program/Expansion Memory vs. the RAM File: the Firmware's Central Distinction
+
+The PC-1600 firmware draws a hard line between two uses of RAM, and almost every "why does `MEM` report *X*" question resolves to which side of that line a byte falls on:
+
+- **Program / expansion memory** — the live BASIC program, its variables, and the machine-language area. Directly CPU-addressable: the OS points the page-2/page-3 bank registers at it and *leaves them there*, so BASIC and ML code touch it as ordinary memory with no per-access bank juggling. This is what `MEM` counts. Set up by `NEW "S0:"/"S1:"/"S2:",expr` (§4) and by `INIT "S2:","P"` / `INIT "S2:","M"`. **Ceiling ≈ 77 KB**: internal 16 KB + one 32 KB Slot 1 span + one 32 KB Slot 2 vertical bank (`PC-1600-Memory-Bank-Switching.md` Part 2, "the theoretical maximum").
+- **RAM file / RAM disk (data storage)** — reached *only* through the file system (`SAVE`/`LOAD`/`FILES`/`KILL`/`PRINT#`/`INPUT#`…). The file-system driver is the only code that issues per-access `OUT (28H)` vertical-bank writes, so it can walk all 8 vertical banks of a Slot 2 module (256 KB), of which only vertical bank 0 is ever eligible to become program/expansion memory. `DSKF` reports its free space; `MEM` never sees it.
+
+`INIT "S2:","P",n` (CE-1601M Mode D, `PC-1600-Memory-Bank-Switching.md` Part 7a) makes the split explicit — it partitions one module into *n* KB of program memory + (32−*n*) KB of expansion memory + a 32 KB RAM file in one command. This is why a 256 KB Slot 2 module adds only 32 KB to `MEM` with the remainder data-storage-only, while an equally large Slot 1 module contributes its full span automatically (Slot 1's two banks sit in global Bank 0/1 alongside internal RAM, contiguous, no `INIT` needed).
 
 ---
 
