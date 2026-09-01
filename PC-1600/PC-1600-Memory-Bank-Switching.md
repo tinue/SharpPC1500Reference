@@ -132,8 +132,11 @@ Additional banks in 8000-BFFF:
 
 | Bank | Contents |
 |------|----------|
+| 4 | **Kanji character ROM, 16KB × 8 sub-banks (128KB), Japan-only.** From the CE-1601M Service Manual §5 memory map ("PC-1600 kanji memory ROM 16KB×8 bank", marked *1 = Japan only). Port 31H page-2 field = 4. Independent of Bank 4 in the 4000–7FFF field (CE-1600P ROM) — different window, different bit-field, no conflict. The 8-way sub-bank mechanism is not legible in that scan (plausibly Port 28H reused, or Port 3DH address latching). |
 | 6 | Display routines, timer/serial control, char/token tables (CS123) |
 | 7 | Unused, but addressable (confirmed by TRM §2.1's own prose; see `PC-1600-Memory-Architecture.md` §2) |
+
+**"(S2:)" at Bank 1 / 4000–7FFF (CE-1601M Service Manual §5 map).** Sharp's own SC7852 memory map shows a *parenthesised* `(S2:)` in the 4000–7FFF window of Bank 1, alongside `System ROM` in Banks 0 and 3. This is **not** a module-connector capability — the CE-1600M/CE-1601M schematics tie the module CE to pin-4 RAM1#/RAM2#, which the gate array asserts only for 8000–BFFF (footnote † above). It is a **gate-array / firmware remap**: `SLOT2MAP` (0199H) and the Port 3DH address-latch outputs (A14A–A16A) let the mainboard route the Slot 2 RAM select to assert for a 4000–7FFF/Bank-1 access on firmware request. The module is unaware — it just sees RAM1# asserted. For an emulator this is a mainboard-side effective-address rewrite feeding the ordinary 8000–BFFF slot decode, never a connector pin. This is the actual mechanism behind every "Slot 2 ROM at 4000–7FFF" label in older summaries.
 
 ### Auxiliary Bank Control Ports
 
@@ -499,19 +502,42 @@ Where the CE-1600M (Part 7) is small enough (32KB) to be addressed with Port 31H
 | Write protect | Slide DIP switch, hardware-gated (see Circuit below) |
 | Size / weight | 40.9 x 42.8 x 8.5mm, 15g -- identical footprint to the CE-1600M |
 
+### Connector Wiring (from the CE-1601M *Schaltplan*)
+
+Same 40-pin connector as the CE-1600M (Part 7), with two additions:
+
+| Pin | Signal | Notes |
+|---|---|---|
+| 1 | VCC | |
+| 4 | **RAM1** (slot select / RAMSN) | 8000–BFFF only, as Part 7 |
+| 5 | **PVOUT** | the SRAM's A14 (= Port 31H b4, the 16KB-half select) |
+| 6 | MREQ | |
+| 7–14 | D7 … D0 | also the vertical-bank value latched by the '131F on a port-28H write |
+| **16** | **K0** | Slot 2 I/O-select — feeds the '131F (enable / latch-clock) |
+| **18** | **K2** | Slot 2 I/O-select — feeds the '131F |
+| 20 | VGG | |
+| 24–37 | A13 … A0 | **A0–A13 only**; no A14/A15 on the connector |
+| 38 / 39 | RD# / WR# | WR# also gated through the write-protect network |
+| 40 | GND | |
+
+Not wired: pin 2 (PVIN), pin 3 (PU), pin 15 (INH), pin 17 (K1), pin 19 (PT), pins 22–23 (A14/A15).
+
 ### Internal Hardware
 
-- 2 x D43256G SRAM (32Kx8 = 32KB each), part suffix -12L or -15L (speed grade; -15L from '87 Feb. production) -- labeled RAM0 and RAM1 on the PWB
-- 1 x TC74HC13xF logic IC (OCR of the scanned manual reads "TC74HC131F"; the pinout in the circuit diagram -- A/B/C address inputs, CK latch-enable, G1/G2A/G2B enables, Y1-Y6 outputs visible -- matches a **74HC137, a 3-line-to-8-line decoder/demultiplexer with an address latch**, not a plain 138. The latch is presumably what lets the module hold its last-selected vertical bank across the brief interval when the Z-80 address bus is doing something unrelated to port 28H.)
-- DAN202K diode array + 1SS98 diode -- battery-vs-VCC switchover, so the module runs off system power when installed and off the CR2032 only when removed or the host is off
-- DTA143XK transistor pair + 4.7K/10K resistor network -- write-protect gating, driven by the DIP slide switch (560K pull-up) and both RD/WR lines
+- 2 x D43256G / μPB43256G SRAM (32Kx8 = 32KB each), part suffix -12L or -15L (speed grade; -15L→-12L from '87 Feb. production) -- labeled RAM0 and RAM1 on the PWB
+- 1 x TC74HC131F -- a **3-to-8 decoder/demultiplexer with address latch** (74HC137-class: A/B/C select inputs, CK latch-enable, G1/G2A/G2B enables, Y0-Y7 outputs). The latch holds the last-selected vertical bank across the interval when the Z-80 bus is doing something unrelated to port 28H.
+- **`0M` / `1M` solder-jumper pads** (with R4, 560K pull-up) feeding the '131F's high select input -- a **bank-count mode strap**: `0M` leaves only Y0/Y1 usable (2 vertical banks = the CE-1601M's 64KB); `1M` enables all 8 Y-outputs (8 vertical banks = 256KB). The same PWB with all SRAM sites populated and this strap set is almost certainly the **CE-1650M**. Structurally the same idea as *superRAM*'s Options 1/2/3 jumper (Part 7b), on Sharp's own board.
+- DAN202K diode array + 1SS98 diode -- battery-vs-VCC switchover
+- DTA143XK transistor pair x2 + 4.7K/10K resistor network -- write-protect gating, driven by the "Protect SW" slide switch (positions 0/1, 560K pull-up R1) and the RD/WR lines
 - 1uF capacitor -- supply smoothing near the battery node
 
 ### Circuit Description
 
-The TC74HC137-class decoder's A/B/C select inputs are driven from low address bits, its G-family enables from the slot's **K0/K2** I/O-select lines (pins 4/16/18 on CN-8, per `Expansion-Connectors.md` §4.2) -- i.e. from the Z-80 I/O-port decode for the 28-2FH range, not from the memory-mapped M REQ path. Its Y-outputs each active-low-enable one physical SRAM chip's CS. Because there are only 2 physical SRAM chips (RAM0, RAM1), only 2 of the decoder's 8 possible outputs are ever populated -- the CE-1601M occupies **vertical banks 0 and 1** of the 8 that Port 28H can select (Part 2 above), leaving banks 2-7 electrically unconnected on this specific module. The same decoder, populated with up to 8 physical 32KB chips instead of 2, would use all 8 outputs and reach the full 256KB Slot-2 ceiling described in Part 2 -- the CE-1601M's own decode logic already has that headroom; it's simply built with a fraction of the possible RAM behind it.
+The TC74HC131F latches the **data byte** written to I/O port 28H (the vertical-bank number 0–n, per the §5 map: "selected when data of 0 to 9 are written in 28H") on a strobe decoded from the slot's **K0/K2** I/O-select lines (connector pins 16/18) -- i.e. from the Z-80 I/O-port decode for the 28-2FH range, not the memory-mapped MREQ path. Its A/B/C select inputs are the low data bits; its Y-outputs each active-low-enable one physical SRAM chip's CS. With only 2 SRAM chips (RAM0, RAM1) and the `0M` strap, only Y0/Y1 are populated -- the CE-1601M occupies **vertical banks 0 and 1** of the 8 Port 28H can select, leaving 2-7 electrically absent. Populated with 8 chips and the `1M` strap, the same board reaches the full 256KB Slot-2 ceiling (Part 2) -- this is the CE-1650M.
 
-Address lines A0-A14 (15 bits, enough for a 32Kx8 chip) go directly to both SRAM chips' address pins; PVOUT is also wired to the RAM chips (visible on both DIP footprints in the schematic) as the bit that distinguishes the two 16KB halves (Z-80 Bank 2 vs. Bank 3) of whichever 32KB vertical bank is currently selected -- confirming the "one vertical bank = 32KB = Bank2+Bank3 together" model from Part 2.
+(The §5 map's own wording is "data of **0 to 9**" -- present in the clean manual text, not just an OCR artefact as an earlier revision guessed -- but the hardware is 8 vertical banks: the map's own bank numbering runs 0–7, and *superRAM* (Part 7b) independently confirms 0–7. Treat "0 to 9" as a longstanding quirk of Sharp's wording, 8 banks as the truth.)
+
+The connector carries only A0–A13 (14 bits); each 32Kx8 SRAM's 15th address bit (A14) comes from **PVOUT**, distinguishing the two 16KB halves (Z-80 Bank 2 vs. Bank 3) of whichever 32KB vertical bank the '131F has selected -- confirming "one vertical bank = 32KB = Bank2+Bank3 together" from Part 2, and matching the CE-1600M's identical use of PVOUT (Part 7).
 
 ### Usage Modes (via `INIT`)
 
