@@ -226,6 +226,23 @@ events the sub-CPU itself raises, all of which funnel into port-32H/35H **bit 6*
 
 (mask: bit = 1 → enabled; SRIRQ: bit = 1 → that event is pending)
 
+### 7.2 Analog-input connector (CN6)
+
+Physical 3-pin header, separate from the serial connectors, carrying the raw signal that
+`SRA1` (§7 above) digitises:
+
+| Pin | Signal |
+|---|---|
+| 1 | GND |
+| 2 | NC |
+| 3 | AIN (analog input) |
+
+`AIN` reaches this connector directly from the gate array (`AIN(CN2-10)` on the main
+board) — it does not pass through the TC8576F UART or the BX7269W RS-232C level shifter
+(`PC-1600-Serial-Hardware-Notes.md` §1). Source: PC-1600 main-board wiring diagram scan
+(2026-09-04); pin labels 2/3 are legible, exact silkscreen names not cross-checked
+against the TRM.
+
 ## TODO
 
 - §3.4: exact edge/level behaviour of 32H (cause) / 35H (mask) — reconcile the two

@@ -30,6 +30,33 @@ be used at the same time.**
 - **Power note:** RS-232C draws more than SIO (it needs `VDD` generation). After an
   RS-232C session, switch back to SIO to save battery.
 
+### 1.1 BX7269W signal mapping (main-board wiring diagram)
+
+The BX7269W does not just level-shift `TXD`/`RXD` — every RS-232C control line is routed
+through it, one gate-array-side pin per RS-232C-side pin. Confirmed from the PC-1600
+main-board wiring diagram (2026-09-04 scan):
+
+| Gate-array side (CN2 pin) | IC1 (BX7269W) input | IC1 output | RS-232C connector (CN4) | V.24 circuit |
+|---|---|---|---|---|
+| SDA (CN2-2) | SDA | SD | TxD | 103 |
+| RDA (CN2-3) | RDA | RD | RxD | 104 |
+| RTS (CN2-4) | RTS | RS | RTS | 105 |
+| CSA (CN2-5) | CSA | CS | CTS | 106 |
+| DRA (CN2-6) | DRA | DR | DSR | 107 |
+| CDA (CN2-7) | SLCT | CD | DCD | 109 |
+| DTR (CN2-9) | DIR | ER | DTR | 108 |
+| QI (CN2-13) | — | CI/RR | (RI-related) | 125 |
+
+So **DTR is level-shifted through the same BX7269W chip** as TxD/RxD (via IC1's `DIR`
+pin), not handled by separate discrete logic. `Q1`/`C1`, wired between `PRI(CN2-8)` and
+IC1, are most likely the charge-pump oscillator that generates `VEE`, but this is
+tentative — not confirmed against the TRM.
+
+**SIO bypasses the level shifter entirely:** `SDF(CN2-11)` and `RDF(CN2-12)` route
+directly from the gate array to the 5-pin SIO connector without passing through IC1 —
+physical confirmation that SIO stays at TTL/CMOS levels and only the RS-232C path needs
+level shifting.
+
 ### TC8576F pinout (as wired in the PC-1600)
 
 | Pin | Symbol | Dir | Active | Function |
