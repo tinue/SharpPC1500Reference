@@ -130,9 +130,11 @@ PC-1600 German user manual, §9.2 / Appendix H (`PC-1600-Memory-Architecture.md`
     `TIME$` being unknown to PC-1500 BASIC).
 - **CE-153:** its bundled utility program cannot be used on the PC-1600 (see TRM §5.12,
   the CE-153 control utility for the PC-1600).
-- **CE-150 vs CE-1600P:** different printable area → output layout can differ (adjust
-  with `PCONSOLE "LPT1:"` and `PAPER`); the CE-150 has two remote-control outputs, the
-  CE-1600P only one.
+- **CE-150 vs CE-1600P:** different plottable width → output layout can differ. CE-150 is
+  X = 0..216 units ≈ 42.75mm on 56mm tape; CE-1600P is X = 0..960 units ≈ 190mm on A4
+  (shared scale 0.198mm/unit — see `PC-1600-Peripherals-Hardware.md` §1.0 and
+  `SharpBasicReference/CE-150-Reference.md`). Adjust with `PCONSOLE "LPT1:"` and `PAPER`.
+  The CE-150 has two remote-control outputs, the CE-1600P only one.
 
 ## Cross-references
 

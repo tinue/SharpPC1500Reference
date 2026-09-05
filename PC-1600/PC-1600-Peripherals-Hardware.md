@@ -20,6 +20,17 @@ The CE-1600P is an A4 4-colour pen plotter-printer with a built-in cassette inte
 `PC-1600-Memory-Bank-Switching.md` Part 6); its work-area state is in
 `PC-1600-Work-Area-Map.md` §3.4 (F182H–F194H) and §3.7 (F9E0H–F9F8H).
 
+### 1.0 Plot geometry
+
+- **Plottable width (X):** X = 0 to 960 plotter units ≈ **190mm**, the pen clips at this
+  edge. Scale = **0.198mm per unit** (190 / 960). The CE-150 shares this same step
+  (`SharpBasicReference/CE-150-Reference.md`: 216 units ≈ 42.75mm) — same mechanism, just
+  a wider carriage on A4 stock. The CE-1600P's wider travel makes it the better source
+  for the mm/unit figure.
+- **Y:** no fixed page length in roll mode (`MODE` b1 = 1, `PC-1600-Work-Area-Map.md`
+  §3.4); `PSCRL` (IOCS 0AH) sets the Y-direction print area on the paper. Cut-sheet
+  mode (`MODE` b1 = 0) is bounded by the sheet.
+
 ### 1.1 Two call mechanisms
 
 **§3.7.1 — direct-call routines** (`CALL <Bank 4, address>`):
