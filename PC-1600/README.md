@@ -12,9 +12,13 @@ Serves two goals:
    two 40-pin memory-slot connectors.
 
 **BASIC is deliberately out of scope here.** The PC-1600's BASIC is a superset of the
-PC-1500's (≈99 % shared token codes); it will be covered for both machines together in
-`SharpBasicReference/`, the BASIC prompt guide, and a shared token-code guide — not in
-this sub-corpus.
+PC-1500's (≈99 % shared token codes) and is documented for both machines together in
+`SharpBasicReference/` — which now carries `PC-1600-BASIC-Reference.md` (the full
+language reference, incl. Appendix H's PC-1500↔PC-1600 compatibility notes),
+`PC-1600-Command-Dictionary.md` (per-command, A–Z) and `PC-1600-Error-Codes.md`,
+alongside the PC-1500 references and the combined `Command-Index.md`. The BASIC prompt
+guide and a shared token-code guide are still PC-1500-only / unwritten. None of this
+lives in this sub-corpus.
 
 Sources — Sharp's own manuals, plus one independent emulator used for cross-validation —
 are listed under **Sources & validation** below. Individual documents cite only the
