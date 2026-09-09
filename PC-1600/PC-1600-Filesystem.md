@@ -116,7 +116,9 @@ Slot / bank mapping (in the Z-80 8000H–BFFFH window):
 | 32 KB (CE-1600M/1620M) | Bank 0 + Bank 1 | Bank 2 + Bank 3 |
 
 Larger capacities are reached through the Port 28H vertical-bank mechanism
-(`PC-1600-Memory-Bank-Switching.md` Part 2) — "for future extension".
+(`PC-1600-Memory-Bank-Switching.md` Part 2) — "for future extension". The ROM
+geometry table (§5.2) actually carries rows up to 320 KB (`F9H`), and the
+boot-sector header can be hand-patched past `INIT`'s 256 KB ceiling (§5.5).
 
 Geometry: each module → **4 KB tracks** → **512-byte sectors**. A 16 KB module has
 32 sectors (0–31) in 4 tracks; a 32 KB module has 64 sectors (0–63) in 8 tracks. Because
@@ -135,7 +137,7 @@ Offsets within the (512-byte) boot sector:
 |---|---|
 | 00H | `55H` — file-module header ID code |
 | 01H | `80H` |
-| 02H | checksum |
+| 02H | checksum — set so the 8-bit sum of boot-sector bytes `00H..1FH` is `00H` (ROM-verified across F1/F3/F7 disks) |
 | 03H | boot flag — `C3H` or `1BH` ⇒ the program is booted |
 | 04H..05H | jump address (low, high) |
 | 06H | `00H` |
@@ -167,19 +169,53 @@ Offsets within the (512-byte) boot sector:
 Constant across all sizes: sector size `0200H`; (sector size/32)−1 = `0FH`;
 `DIRSFT` = `04H`; first FAT sector = `0001H`; `FATSIZ` = `01H`; 8 sectors/track.
 
-Per-size (selected rows):
+#### The geometry table in ROM
+
+`romIII-3.bin` carries this table at **Z-80 address `5006H + (MediaID − F0H)·19`**
+— one **19-byte row per Media ID**, byte-for-byte the boot sector's `08H..1AH`
+fields (Media ID, bytes/sector, `0FH`, `DIRSFT`, (sec/clus)−1, `CLSSFT`,
+first-FAT-sector, `FATCNT`, `MAXDIR`, first-data-sector, `MAXCLS`, `FATSIZ`,
+first-dir-sector, sectors/track). The setup routine at `4F5F` indexes it by
+`MediaID & 0x0F`. **The table in this ROM image ends at F9H (320 KB)** — bytes
+past that row are code, so `FAH`–`FFH` from the Media-ID list above are the
+TRM's documented ID *range*, not shipping-ROM geometry. `INIT` never formats
+above **F8H (256 KB)** anyway.
+
+Rows transcribed directly from the ROM (all: sector size `0200H`, `0BH`=`0FH`,
+`DIRSFT`=`04H`, first FAT sector `0001H`, `FATSIZ`=`01H`, 8 sectors/track):
 
 | KB | Media ID | (sec/clus)−1 | CLSSFT | FATCNT | MAXDIR | first data sector | MAXCLS | first dir sector |
 |---|---|---|---|---|---|---|---|---|
 | 16 | F0H | 00H | 01H | 1 | 20H | 0004H | 001DH | 0002H |
 | 32 | F1H | 00H | 01H | 1 | 30H | 0005H | 003CH | 0002H |
-| 64 | F2H | 00H | 01H | 2 | 30H | 0006H | 007BH | 0002H |
-| 128 | F4H | 00H | 01H | 2 | 80H | 000BH | 00F6H | 0002H |
+| 64 | F2H | 00H | 01H | 2 | 30H | 0006H | 007BH | 0003H |
+| 96 | F3H | 00H | 01H | 2 | 60H | 0009H | 00B8H | 0003H |
+| 128 | F4H | 00H | 01H | 2 | 80H | 000BH | 00F6H | 0003H |
+| 160 | F5H | 01H | 02H | 2 | 90H | 000CH | 009BH | 0003H |
+| 192 | F6H | 01H | 02H | 2 | 90H | 000CH | 00BBH | 0003H |
+| 224 | F7H | 01H | 02H | 2 | F0H | 0012H | 00D8H | 0003H |
 | 256 | F8H | 01H | 02H | 2 | FEH | 0014H | 00F7H | 0003H |
-| 1024 | FFH | 07H | 04H | 2 | FEH | 0018H | 00FEH | 0003H |
+| 320 | F9H | 03H | 03H | 2 | D0H | 0010H | 009DH | 0003H |
 
-(The full 16-row table is in the scan; transcribe the rest if a specific capacity is
-needed.)
+(The "first dir sector" column supersedes the earlier hand-transcribed
+`0002H` for the `FATCNT`=2 rows: with two FAT copies the FAT occupies
+sectors 1–2 and the directory starts at 3.)
+
+From the TRM scan (not in this ROM's table — spec only): the 1024 KB
+row would be `FFH | 07H | 04H | 2 | FEH | 0018H | 00FEH | 0003H`.
+
+#### The table is INIT-only
+
+Mount and `DSKF` do **not** re-consult this table for a formatted medium.
+For any Media ID ≥ F2H the setup routine (`4F93`→`4F9A`) copies the boot
+sector's own `08H..1AH` bytes into a RAM work area (`FC77H`) and the driver
+runs from that copy. So a **hand-written boot sector with a Media ID this
+ROM's table doesn't contain still mounts** — the basis of the third-party
+superRAM 512 KB patch (§5.5).
+
+`DSKF "d:"` returns **`(MAXCLS − 1) × sectors_per_cluster × 512`** bytes,
+computed from the mounted volume's boot sector. Verified: F1H → 30208,
+F3H → 93696, F7H → 220160.
 
 ### 5.3 FAT (§3.3.3(2)(b))
 
@@ -213,9 +249,38 @@ FCB's FAT-style packed date/time (§2) confirms the family resemblance to MS-DOS
 (On a floppy the directory is logical sectors 3–5 = 48 entries per side. The RAM-disk
 directory area is located by the boot sector's directory-area pointer, §5.2.)
 
+### 5.5 Patching the header past INIT's 256 KB ceiling
+
+`INIT` only builds volumes up to `F8H` (256 KB), but §5.2 shows mount/`DSKF`
+trust the boot sector, not the ROM table — so a bigger volume can be reached
+by **formatting small, then rewriting the header in place**. This is what the
+third-party *superRAM* module's `SUPERRAM.BIN` does; the same edit lives baked
+into `Calc-U-1600`'s `superram.card.yaml` (commit `abdb369`).
+
+Observed split-format layout (from CE-1601M-class dumps at 2/4/8 vertical
+banks): **vbank 0** holds a bare geometry block (bytes `00H..07H` = `FF`, no
+`55H`) with the Media ID for the *whole module*; **vbank 1** holds the mounted
+volume's real boot sector with the Media ID for *(module − 32 KB)* — the 32 KB
+reserved as `S0:` program memory — using that ID's standard table row. Logical
+sector 0 of the volume is vbank 1 offset 0; the data area runs on linearly
+through vbanks 2, 3, …
+
+**512 KB example.** There is no Media ID for 480 KB (the steps are
+256→320→384→512 = F8→F9→FA→FB), so the volume is described as `FBH` (512 KB)
+with `MAXCLS` reduced by the carve:
+
+- FBH row, extrapolated on the F9H pattern (2 KB clusters) and checked against
+  the superRAM manual's `DSKF` figures 514048 (pure) / 481280 (32 KB carved):
+  (sec/clus)−1 `03H`, `CLSSFT` `03H`, `FATCNT` 2, `MAXDIR` `FEH`,
+  first-data-sector `0014H`, `MAXCLS` `00FCH` (252), first-dir-sector `0003H`.
+- With a 32 KB `S0:` carve: `MAXCLS` `00FCH` − 16 (= 32 KB / 2 KB clusters) =
+  `00ECH` (236) → `DSKF "S2:"` = (236 − 1) × 2048 = **481280**.
+- vbank 0's block gets the pure FBH row (`MAXCLS` `00FCH`); FAT byte 0 (the
+  format-ID copy) in both vbanks → `FBH`; boot-sector checksum at `02H`
+  recomputed per §5.1.
+
 ## Open items
 
-- The full 16-row media-ID geometry table (§5.2).
 - Directory-entry byte layout (§3.8.3(4)).
 - `DIRSFT` / `CLSSFT` exact meaning (bit-shift counts for directory-entry-size and
   cluster-size arithmetic — infer from §3.8 or the ROM).
