@@ -90,10 +90,22 @@ PC-1600 German user manual, §9.2 / Appendix H (`PC-1600-Memory-Architecture.md`
 ## 5. Running PC-1500/1500A BASIC programs (TRM §5.15(1))
 
 1. Put the PC-1600 in **MODE 1** before starting the program.
-2. **MODE 1 prerequisites:** no RAM module larger than 16 KB in Slot 1, and **no module
-   at all in Slot 2** — *unless* the modules are used purely as a RAM disk (CE-1600M in
-   Slot 1, CE-1600M or CE-161 in Slot 2), in which case the RAM disk must have been
-   formatted (`INIT "Sn:","F"`) while in **MODE 0**.
+2. **MODE 1 prerequisites (TRM §5.15(1); Op. Manual App. H):** no RAM module larger than
+   16 KB in Slot 1, and **no module at all in Slot 2** — *unless* the modules are used
+   purely as a RAM disk (CE-1600M in Slot 1, CE-1600M or CE-161 in Slot 2), in which case
+   the RAM disk must have been formatted (`INIT "Sn:","F"`) while in **MODE 0**. To
+   actually *run* a PC-1500 program you also need at least one **≤ 16 KB** module present
+   (CE-151/155/159/161) to supply its work RAM — with no module in either slot, `MODE 1`
+   errors.
+   - **Failure = `ERROR 110`** ("Cannot set MODE 1"). The firmware's real gate is that
+     the RAM the LH5803 sees at 0000–3FFF must resolve to **one flat, non-bank-switched
+     region of ≤ 16 KB**. Any bank-switched module (CE-1600M's PVOUT half-select,
+     CE-1601M's Port 28H vertical banks, a CE-163's address-strobe latch) fails, in
+     *either* slot, and a two-module combination fails if it includes such a module even
+     when the other module is a plain ≤ 16 KB card. Full analysis, the observed-vs-manual
+     reconciliation table, and the mechanism are in
+     `PC-1600-Memory-Architecture.md` §8; the flat LH5803-view map MODE 1 depends on is
+     §4b.6 there.
 3. **Renamed commands** — a PC-1500 program must use the PC-1600 name:
 
    | PC-1500 / 1500A | PC-1600 |

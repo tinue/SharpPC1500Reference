@@ -6,7 +6,7 @@ This document is the narrative/comparison layer for the PC-1600's memory system:
 
 For the exhaustive mechanism-level reference (Port 31H truth tables per address range, the LR38041 gate array's pin-by-pin function, firmware bank-call routines, module header formats, and real module hardware including the CE-1600M/CE-1601M/*superRAM*), see `PC-1600-Memory-Bank-Switching.md` — this document draws on it throughout rather than repeating it. For the PC-1500/1500A's own decoder architecture, see `PC-1500-Address-Decoding.md`. For raw connector pinouts across all three machines, see `Expansion-Connectors.md`.
 
-**Sources for this document specifically:** the PC-1600 Technical Reference Manual §2.1 ("Memory Map"), the paragraph introducing 8 memory banks and internal-RAM layout that follows it, and §2.2 ("BASIC Commands Related to Machine Language") — three TRM figures not previously transcribed into this project's PC-1600 material — cross-checked against the existing Service-Manual-sourced content in `PC-1600-Memory-Bank-Switching.md`, and against the PC-1600's own German-language user manual (*Bedienungsanleitung*), whose Appendix D (memory map, in German) and Appendix E/H (machine-language commands, PC-1500 compatibility) independently confirm most of the TRM material and correct several claims this document made in earlier revisions — noted inline where that happened.
+**Sources for this document specifically:** the PC-1600 Technical Reference Manual §2.1 ("Memory Map"), the paragraph introducing 8 memory banks and internal-RAM layout that follows it, §2.2 ("BASIC Commands Related to Machine Language"), **§3.12** ("Memory": 3.12.1 Slots and Memory Modules, 3.12.2 Work Area used for Memory, 3.12.3 IOCS routines) and **§3.13** ("Memory Module": location / type / header) — the TRM figures behind §2–§4b, not previously transcribed into this project's PC-1600 material — plus **§5.15** and the Operation Manual Appendices **F** (error codes) and **H** (PC-1500 compatibility) for §8. Cross-checked against the existing Service-Manual-sourced content in `PC-1600-Memory-Bank-Switching.md`, and against the PC-1600's own German-language user manual (*Bedienungsanleitung*), whose Appendix D (memory map, in German) and Appendix E/H (machine-language commands, PC-1500 compatibility) independently confirm most of the TRM material and correct several claims this document made in earlier revisions — noted inline where that happened.
 
 ---
 
@@ -125,11 +125,195 @@ This C5H-offset convention is identical in spirit to the PC-1500/1500A's own mod
 
 The PC-1600 firmware draws a hard line between RAM the CPU addresses directly and RAM reached only through the file system; on the CPU-addressable side it further separates **program memory** from **expansion memory**, and almost every "why does `MEM` report *X*" question resolves to which of these three a byte falls in:
 
-- **Work area / expansion memory** — the RAM that holds the *currently active* BASIC program, its variables, and the machine-language area: §3's internal 11,834-byte user area, plus any module RAM glued onto it. "Expansion memory" is the manual's term for that glued-on module part. Directly CPU-addressable: the OS points the page-2/page-3 bank registers at it and *leaves them there*, so BASIC and ML code touch it as ordinary memory with no per-access bank juggling. **This is the one and only thing `MEM` counts.** The module part is set up by `NEW "S0:"/"S1:"/"S2:",expr` (§4) and by `INIT "S2:","M"` (and by the (32−*n*) remainder of `INIT "S2:","P",n`). Its module-side bookkeeping lives in main-unit RAM, so a Slot 2 module's expansion-memory contribution does **not** survive a battery swap. **Ceiling ≈ 77 KB**: internal 16 KB + one 32 KB Slot 1 span + one 32 KB Slot 2 vertical bank (`PC-1600-Memory-Bank-Switching.md` Part 2, "the theoretical maximum").
+- **Work area / expansion memory** — the RAM that holds the *currently active* BASIC program, its variables, and the machine-language area: §3's internal 11,834-byte user area, plus any module RAM glued onto it. "Expansion memory" is the manual's term for that glued-on module part. Directly CPU-addressable: the OS points the page-2/page-3 bank registers at it and *leaves them there*, so BASIC and ML code touch it as ordinary memory with no per-access bank juggling. **This is the one and only thing `MEM` counts.** A flat module carrying an extension-module header (CE-1600M in either slot; Slot 1 modules generally) is folded in **automatically at boot**; otherwise the module part is set up by `NEW "S0:"/"S1:"/"S2:",expr` (§4) or `INIT "S2:","M"` (and by the (32−*n*) remainder of `INIT "S2:","P",n`) — see §4b.3(d). Its module-side bookkeeping lives in main-unit RAM, so a Slot 2 module's expansion-memory contribution does **not** survive a battery swap. **Ceiling ≈ 77 KB**: internal 16 KB + one 32 KB Slot 1 span + one 32 KB Slot 2 vertical bank (`PC-1600-Memory-Bank-Switching.md` Part 2, "the theoretical maximum").
 - **Program memory** — a *separate, resident program-storage area*, set up by `INIT "S2:","P"` (or the *n* KB named in `INIT "S2:","P",n`). Also directly CPU-addressable when active, but it holds a parked BASIC program rather than extending the current work area, so **`MEM` never reflects it** — allocating it leaves `MEM` unchanged. `TITLE`-named, cleared with `NEW 0`, held in the module SRAM so it *does* survive a battery swap. Internally it has the same fixed layout as §3's internal RAM: an 8-byte header + a 189-byte "Reserve Program Area" + the **"BASIC text area"** (the tokenized program lines themselves) — the CE-1601M manual names those two sub-regions, but the only term that matters at the `INIT` level is "program memory".
 - **RAM file / RAM disk (data storage)** — reached *only* through the file system (`SAVE`/`LOAD`/`FILES`/`KILL`/`PRINT#`/`INPUT#`…). The file-system driver is the only code that issues per-access `OUT (28H)` vertical-bank writes, so it can walk all 8 vertical banks of a Slot 2 module (256 KB), of which only vertical bank 0 is ever eligible to become program or expansion memory. `DSKF` reports its free space; `MEM` never sees it.
 
-`INIT "S2:","P",n` (CE-1601M Mode D, `PC-1600-Memory-Bank-Switching.md` Part 7a) makes the split explicit — it partitions one module's vertical bank 0 into *n* KB of program memory + (32−*n*) KB of expansion memory, and hands vertical bank 1 to a 32 KB RAM file, in one command. So `MEM` rises by exactly (32−*n*) KB: plain `INIT "S2:","P"` is the *n* = 32 case (all program memory, `MEM` unchanged) and plain `INIT "S2:","M"` is the *n* = 0 case (all expansion memory, `MEM` +32 KB). This is why a 256 KB Slot 2 module adds at most 32 KB to `MEM` with the remainder data-storage-only, while an equally large Slot 1 module contributes its full span automatically (Slot 1's two banks sit in global Bank 0/1 alongside internal RAM, contiguous, no `INIT` needed).
+`INIT "S2:","P",n` (CE-1601M Mode D, `PC-1600-Memory-Bank-Switching.md` Part 7a) makes the split explicit — it partitions one module's vertical bank 0 into *n* KB of program memory + (32−*n*) KB of expansion memory, and hands vertical bank 1 to a 32 KB RAM file, in one command. So `MEM` rises by exactly (32−*n*) KB: plain `INIT "S2:","P"` is the *n* = 32 case (all program memory, `MEM` unchanged) and plain `INIT "S2:","M"` is the *n* = 0 case (all expansion memory, `MEM` +32 KB). This is why a 256 KB Slot 2 module adds at most 32 KB to `MEM` with the remainder data-storage-only. `INIT "S2:","P",n` is a *vertical-banked-module* mechanism — a flat 32 KB extension-type module (CE-1600M) in Slot 2 just merges its whole 32 KB at boot with no `INIT` step, the same way a Slot 1 module does (Slot 1's two banks sit in global Bank 0/1 alongside internal RAM, contiguous).
+
+---
+
+## 4b. Where a Module Sits in the 8000–BFFF Window, and How the BASIC/ML Area Slides (TRM §3.12–§3.13)
+
+§4 covered the `NEW "Sx:"` *command*; this section adds the two TRM figures that show the *geometry* — **§3.12.1** ("Slots and Memory Modules", TRM p.127) and **§3.13.1** ("Location of Memory Module", TRM p.135) — plus the "no `NEW` yet" starting state, worked as memory maps. These are the third and fourth previously-untranscribed Chapter-2/Chapter-3 figures (the first two are §2.1's dual bank map and §2.1's internal-RAM map, §2–§3 above).
+
+### 4b.1 The four module "locations" A / B / C / D
+
+TRM §3.13.1 names the four 16 KB module apertures — identical to `PC-1600-Memory-Bank-Switching.md` Part 1's Slot 1a/1b/2a/2b and §2a's convention-1 table, but with the TRM's own single-letter labels:
+
+| Loc | Z-80 window | Global bank | Slot | Port 31H page-2 field (b6:b5:b4) |
+|---|---|---|---|---|
+| **A** | 8000–BFFF | Bank 0 | Slot 1, lower 16 KB | `000` |
+| **B** | 8000–BFFF | Bank 1 | Slot 1, upper 16 KB | `001` |
+| **C** | 8000–BFFF | Bank 2 | Slot 2, lower 16 KB | `010` |
+| **D** | 8000–BFFF | Bank 3 | Slot 2, upper 16 KB | `011` |
+
+"Main memory" is always Bank 0's C000–FFFF (internal 16 KB). TRM §3.13.1's capacity→location rule:
+
+| Module size | Slot 1 | Slot 2 |
+|---|---|---|
+| ≤ 16 KB | → A | → C |
+| 32 KB | → A + B | → C + D |
+| ≥ 48 KB | **cannot be used** | → C + D (one 32 KB slice), rest via Port 28H vertical-bank switching |
+
+### 4b.2 Small modules are top-justified inside their 16 KB location
+
+The single most important detail in the §3.12.1 figure, and the answer to "a CE-155 only covers 8 KB of the window": a sub-16 KB module **occupies the *high* end of location A**, ending at BFFF, with the low part of the window left unmapped (the figure hatches it "not used"). From the figure:
+
+| Module | Size | Slot(s) | Covers (in location A / bank 0) |
+|---|---|---|---|
+| CE-151 | 4 KB | S1 only | **B000–BFFF** (low B000-worth… i.e. top 4 KB) |
+| CE-155 | 8 KB | S1 only | **A000–BFFF** (top 8 KB) |
+| CE-159 | 8 KB (program) | S1 only | **A000–BFFF** (top 8 KB) |
+| CE-161 | 16 KB | S1 **or** S2 | **8000–BFFF** (fills the whole location) |
+| CE-1600M | 32 KB | S1 **or** S2 | 8000–BFFF **× 2 banks** (A + B, or C + D) |
+| CE-1620M | 32 KB EPROM | S1 or S2 | A + B, or C + D |
+| CE-1601M | 64 KB | **S2 only** | C + D, one vertical bank live, Port 28H for the rest |
+
+Top-justification is what makes the merge with internal RAM seamless: the module's last byte is BFFF, internal RAM's first byte is C000, so module-then-internal is one gap-free ascending run and BASIC only needs a single `RAM_START` pointer. The unmapped low part of the window (8000–9FFF for a CE-155, 8000–AFFF for a CE-151) is simply dead address space — not counted by `MEM`, not usable.
+
+TRM §3.12.1's own footnote: *"Even when a memory module is installed in S1 or S2, if it is used as an extension memory, it is referred to as S0."* — i.e. the moment a module's RAM is glued onto the work area, `NEW`/`MEM`/`STATUS` treat it as part of **S0**, not as a separate S1/S2 object. S1/S2 as `NEW`/`INIT`/`TITLE` targets mean "the module *as a program module or RAM file*", a different role (§4a).
+
+### 4b.3 No `NEW` executed yet — the default BASIC-area structure
+
+`NEW` with no machine-language reservation (equivalently `NEW 0`, or power-on default) leaves the **Machine Program Area empty**: BASIC's program-text pointer sits directly on top of the 197-byte reserve, at `[RAM start] + C5H`. What `[RAM start]` *is* depends on the modules:
+
+**(a) Bare machine, no modules** — `[RAM start]` = C000H (internal RAM base).
+
+```
+Z-80 view, Bank 0                       MEM = 11 834
+  8000 ┌───────────────────┐ ─┐
+       │  open bus          │  │  no Slot 1 module → dead space
+  C000 ├───────────────────┤ ─┘
+       │ Header      8 B    │  C000–C007
+  C008 │ Reserve   189 B    │  C008–C0C4     ┐ 197 B fixed (C5H)
+  C0C5 ├───────────────────┤ ◄─ BASIC text start   ┐
+       │ BASIC program  ▲  │                       │
+       │       ⋮           │  grows up             │ User Area
+       │ Variables      ▼  │  grows down from EFFF │ = 11 834 B
+  EFFF ├───────────────────┤                       ┘
+  F000 │ Work Area (fixed) │  4 KB, F000–FFFF (never moves, §2/§3)
+  FFFF └───────────────────┘
+```
+
+**(b) CE-155 (8 KB) in Slot 1, used as extension memory** — `[RAM start]` slides down to A000H. The header + 197-byte reserve **move to the module base**; internal RAM's own C000 area becomes plain user space (only one reserve exists — TRM §3.13.2: *"only one header is placed in location A or C"*).
+
+```
+Z-80 view                              MEM = 20 026   (= 11 834 + 8 192, PC-1500-Address-Decoding.md §5.2)
+  8000 ┌───────────────────┐  open bus (CE-155 does not reach here)
+  A000 ├───────────────────┤ ◄─ [RAM start]
+       │ Header + Reserve  │  A000–A0C4  (197 B)
+  A0C5 ├───────────────────┤ ◄─ BASIC text start
+       │ BASIC program  ▲  │   CE-155 body  A0C5–BFFF  ┐
+  C000 ├─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤   (module → internal,     │ one contiguous
+       │       ⋮   ▲/▼      │    no gap at BFFF→C000)   │ User Area
+  EFFF ├───────────────────┤                           ┘
+  F000 │ Work Area (fixed) │
+  FFFF └───────────────────┘
+```
+
+Same shape for CE-151 (`[RAM start]` = B000H, `MEM` = 11 834 + 4 096) and CE-161 (`[RAM start]` = 8000H, `MEM` = 11 834 + 16 384).
+
+**(c) CE-1600M (32 KB) in Slot 1** — fills locations A **and** B. `[RAM start]` = 8000H (bank 0). The OS leaves the page-2 register on bank 0, so the CPU sees `8000–BFFF(A) → C000–FFFF(internal)` as a flat 32 KB run; the B half (bank 1) is reached by the OS flipping page-2 to bank 1 transparently while walking the program text.
+
+```
+                                        MEM = 44 602   (≈ CE-1600M manual's "up to 44,612")
+  Bank 0  8000–BFFF  CE-1600M low  (loc A)   header+reserve at 8000H, BASIC text from 80C5H
+  Bank 1  8000–BFFF  CE-1600M high (loc B)   ← page-2 flips here transparently
+  Bank 0  C000–EFFF  internal RAM (BASIC/vars)
+  Bank 0  F000–FFFF  Work Area
+```
+
+**(d) Slot 2 — depends on the module type.** Slot 2's RAM is in **Bank 2/3**, not the default bank, so *something* has to repoint page-2 at Bank 2 and leave it there. Two cases:
+
+- **A flat module carrying an *extension-module* header (CE-1600M; a CE-161 formatted as extension).** Boot-time module detection reads the header, sees the extension type (§3.13.2 type 1), and folds the module into the work area **automatically at reset** — page-2 is repointed and left there, exactly as for Slot 1. `MEM` reflects it immediately; `INIT "S2:","M"` is then a no-op. (Emulator-confirmed for the CE-1600M: `MEM` = 77 370 straight after reset with a CE-1600M in each slot.) `INIT "S2:","M"` is only needed here to *re-type* a module that is currently a file or program module back to extension memory.
+- **A vertical-banked module (CE-1601M, CE-1650M, *superRAM*, 128 KB+), or a module typed as file/program.** Default state is RAM disk / parked program — `MEM` stays at the internal-only figure (plus whatever Slot 1 added). `INIT "S2:","M"` (or `NEW "S2:",expr`, or the `(32−n)` remainder of `INIT "S2:","P",n`) dedicates **one 32 KB vertical bank** as expansion memory; the rest stays file-system-only. After it, the instantaneous Z-80 map `8000–BFFF(C) → C000–FFFF(internal)` is flat again — same picture as (c), `MEM` += 32 768.
+
+The structural Slot-1/Slot-2 asymmetry (`PC-1600-Memory-Bank-Switching.md` Part 2) is really about the *ceiling* — Slot 2 can only ever contribute one 32 KB vertical bank to `MEM` regardless of module size — not about whether a command is required: a flat extension-type module auto-merges in either slot.
+
+### 4b.4 `NEW "Sx:",<expr>` — the BASIC area sliding "around" the machine area
+
+The Machine Program Area is always carved at the **bottom** of its target region: from `[target base] + C5H` to `[target base] + <expr> − 1` (with `<expr>` = wanted ML size + C5H). The BASIC program text then starts on the byte **above** that block and grows up; variables still grow down from EFFF. So the ML area is a *fixed low anchor* and the BASIC/variable area is what fills the rest of the merged user span — it "slides" upward by exactly the size of whatever ML block(s) you reserved, and the three targets S0/S1/S2 just let you drop that anchor in three different physical places (internal RAM base, Slot 1 base, Slot 2 base) at the same time.
+
+**Worked example (TRM §2.2, p.128 figure): CE-159 in S1 + CE-1600M in S2**, both as program modules, then:
+
+```
+NEW "S1:",&1000     → ML area  A0C5H–AFFFH        (Slot 1, loc A)     — BASIC text now starts B000H
+NEW "S2:",&5000     → ML area  80C5H–BFFFH (bank2) + 8000H–8FFFH (bank3, no 2nd +C5H)
+NEW "S0:",&1000     → ML area  C0C5H–CFFFH        (internal, bank 0)  — BASIC text in internal RAM starts D000H
+```
+
+Three independent fixed ML blocks (one per base + C5H); the BASIC program/variable area occupies every user byte *not* in one of them — literally sliding "around" all three. Note `NEW "S2:",&5000` (≈ 20 KB) straddles the C/D bank boundary transparently: `80C5–BFFF` in bank 2, continuing at `8000–8FFF` in bank 3 with **no** second reserve, because it is one allocation, not a new base (§4).
+
+### 4b.5 The load order (TRM §3.12.2 "Work Area used for Memory")
+
+When several regions are joined, the OS records — in `S0MTb` (F02AH), `S1MTb`/`S1MBb` (F016H/F018H), `S2MTb`/`S2MBb` (F020H/F022H) and the `ADTBL+1…ADTBL+5` byte table (F1D6H–F1DAH, bank number in bits 4–5) — **the order in which the BASIC program is laid down across the banks**. TRM §3.12.2 Example 1 (CE-159 S1 + CE-1600M S2 as *extension* memory): program fills **bank 0 → bank 2 → bank 3 → main memory** in that order; `S1MTb`/`S2MTb` = FEH ("not a program module — used as extension memory"), `ADTBL+3…+5` = 01H/22H/32H (bank 0, bank 2, bank 3). Example 2 (CE-1600M S1 + CE-161 S2 as *program* modules): `S1MTb`/`S1MBb` = 02H/03H (S1 spans ADTBL+2..+3), `S2MTb` = 04H, load order S0 → S1 → S2. The takeaway: "one contiguous user area" is a firmware abstraction over an explicit, recorded bank sequence — the program text really is scattered across banks 0/2/3/main and the ADTBL list is the map.
+
+The `ADTBL+n` byte-level encoding (`bank = (b>>4)&3`, low nibble = slot, bit 7 = program-module leading bank), and a step-by-step reconstruction of where each tokenised byte lands — for an emulator that injects a program image directly instead of running `LOAD` — are in `PC-1600-Work-Area-Map.md` §4 and `PC-1600-BASIC-Program-Placement.md`.
+
+### 4b.6 LH5803 view of the same configurations
+
+In MODE 1 / under `XCALL`, the LH5803 sees module RAM at **0000–3FFF** and internal RAM at **4000–7FFF** (§5–§6). The same top-justification applies, shifted by −8000H:
+
+```
+Config (b), CE-155 in Slot 1, LH5803 view:
+  0000 ┌───────────┐  open bus
+  2000 ├───────────┤ ◄─ CE-155 body 2000–3FFF  (= Z-80 A000–BFFF)
+  3FFF ├───────────┤
+  4000 │ internal  │  4000–7FFF  (= Z-80 C000–FFFF, bank 0)
+  7000 │  …work    │  7000–7FFF work area  (= Z-80 F000–FFFF)
+  7FFF └───────────┘
+```
+
+This is deliberately a PC-1500-shaped map: a flat module window at the bottom, fixed internal RAM above it, work area at the very top (§6's address-by-address comparison). It only holds when the module is a *single flat ≤16 KB region with no banking* — which is exactly the constraint behind ERROR 110 (§8).
+
+### 4b.7 Worked example: CE-1600M in **both** slots — the maximum-RAM configuration
+
+Two genuine CE-1600Ms (32 KB each, flat, two-bank, no vertical banking) + the internal 16 KB is the largest `MEM` a PC-1600 can reach. **Both slots merge automatically at boot** — a CE-1600M carries an *extension-module* header (§3.13.2 type 1), so module detection folds it into the work area at reset for Slot 2 just as for Slot 1. `MEM` reports **77 370 immediately after a reset**, and `INIT "S2:","M"` is a **no-op** in this state (confirmed on the emulator). `INIT "S2:","M"` only matters if the module is *currently* typed as a file or program module — it re-types it back to extension memory. (Contrast the vertical-banked modules below.)
+
+```
+   Bank 0  8000–BFFF  Slot 1 CE-1600M, low half   (loc A)   ┐
+   Bank 1  8000–BFFF  Slot 1 CE-1600M, high half  (loc B)   │ one logical
+   Bank 2  8000–BFFF  Slot 2 CE-1600M, low half   (loc C)   │ user area,
+   Bank 3  8000–BFFF  Slot 2 CE-1600M, high half  (loc D)   │ scattered
+   Bank 0  C000–EFFF  internal RAM                          │ across banks
+   Bank 0  F000–FFFF  Work Area (fixed)                     ┘ per ADTBL (§4b.5)
+
+   16384 + 32768 + 32768 − 4550 = 77 370   ← MEM, confirmed on the emulator (2 × CE-1600M)
+```
+
+**This is the ceiling.** Both slot contributions are already at their architectural cap (Slot 1: only Bank 0 + Bank 1 exist for its window; Slot 2: only vertical bank 0 can be S0 expansion memory — and a CE-1600M *is* exactly one 32 KB vertical bank). A CE-1601M / CE-1650M / *superRAM* in Slot 2 keeps `MEM` at this same figure and adds its extra vertical banks **only as RAM-disk space** (`PC-1600-Memory-Bank-Switching.md` Part 2, "Why Slot 1 and Slot 2 contribute so differently"). The one untapped reserve anywhere is Bank 7 ("addressable but unused", §2) — no module uses it.
+
+**Machine-language areas in this configuration.** `NEW "S0:"`, `NEW "S1:"` and `NEW "S2:"` are three independent targets that **accumulate** — issuing them in sequence leaves all three ML areas reserved; only the BASIC program text is cleared by each `NEW` (TRM §2.2's own example does exactly this). Each carves `[base]+C5H … [base]+<expr>−1` from the bottom of its region (`<expr>` = program size + `&C5` = size + 197):
+
+| `NEW` | Base | ML area | Max one contiguous block |
+|---|---|---|---|
+| `NEW "S1:",<expr>` | 8000H | 80C5H → Bank 0's 8000–BFFF, then Bank 1's 8000–BFFF | **32 571 bytes** (`<expr>` ≤ `&8000`) |
+| `NEW "S2:",<expr>` | 8000H | 80C5H → Bank 2, then Bank 3 (transparent across the C/D boundary) | **32 571 bytes** |
+| `NEW "S0:",<expr>` | C000H | C0C5H → internal RAM only (stops below the F000H work area) | **≈ 11.8 KB** |
+
+So one contiguous ML program is capped at **≈ 32.5 KB** (a full slot); reserving all three regions yields ≈ 77 KB of ML area total, i.e. almost all of `MEM`. For a program larger than one slot, split it across regions and cross the bank boundary with `BANKCALL` (019FH) / `RST 20H` / `BANKCALL2` (0020H).
+
+**Two programs in two slots** — the intended use of the multi-target form:
+
+```
+NEW "S1:",&<sizeA+C5>          ' area A at 80C5H, Bank 0/1
+NEW "S2:",&<sizeB+C5>          ' area B at 80C5H, Bank 2/3   (does not disturb area A)
+' load program A (e.g. CLOADM "A";#0,&80C5,… or POKE #0,…), load program B into #2
+CALL #0,&80C5 [,var]           ' run A
+CALL #2,&80C5 [,var]           ' run B
+```
+
+All of this is **SC-7852 (Z-80)** code (`CALL` / `PEEK` / `POKE` / `BLOAD` / `CLOADM`); the LH-5803 side is the separate `XCALL` / `XPEEK` / `XPOKE` path with its own address map (§5–§6).
+
+**Effect on the BASIC area — it flows around the reservations; a slot is never lost.** The German TRM §2.2 puts it directly: `NEW` reserves the ML space "*and thereby simultaneously specifies the lower address of the BASIC program area*". Every byte of the ≈ 77 KB user area not inside an ML block stays BASIC-program / variable space; the interpreter tracks the scattered bank order in `ADTBL` (§4b.5) and treats it as one stream. Reserve 8 KB in Slot 1 and the other 24 KB of that slot is still BASIC space. Rule of thumb:
+
+```
+MEM after reservations  ≈  77 370 − Σ <expr>        (over the regions you targeted;
+                                                     each <expr> already includes its 197-byte reserve)
+```
+
+Regions you never point `NEW` at cost nothing extra; targeting all three pays ≈ 3 × 197 B of reserve rather than one. With two CE-1600Ms there is **no** slot unavailable to BASIC — both are live expansion memory from reset. (A slot only goes dark if its module is typed as a file/program module, or — for a *vertical-banked* module such as the CE-1601M — until `INIT "S2:","M"` dedicates vertical bank 0; see §4b.3(d).)
 
 ---
 
@@ -213,3 +397,62 @@ This is the part that isn't a re-statement of anything else in this project — 
 | ML-area compatibility | N/A | `&7C00`–`&7FFF` (PC-1500A's ML area) explicitly reserved for PC-1600 system use, confirmed by the German manual — Sharp states the two models are *not* compatible here | `&7C01`–`&7FFF` is the PC-1500A's own ML area (`PC-1500-Address-Decoding.md` §4) |
 | Largest documented module | *superRAM*, 512KB (Slot 2, Port 28H extended), `PC-1600-Memory-Bank-Switching.md` Part 7b | N/A — module capacity as seen from LH5803 is whatever Z-80-side bank is currently selected, 16KB at a time | CE-155-class, ≤28KB combined with built-in RAM (`Expansion-Connectors.md` §3.2) |
 | Confirmed max user (`MEM`), 16KB module | 32KB raw span, `PC-1500-Address-Decoding.md` §5.3 (0000–8000H); `MEM` = 28218 confirmed on real hardware, computed by Z-80-resident BASIC regardless of MODE (§5's note) | **Identical to Z-80 view — trivially, since `MEM` is core BASIC housekeeping and never runs on the LH5803**; `MODE1` doesn't reroute it, per §5's revised model | 28KB raw span (Y0 16KB + S0–S5 12KB, deliberately excluding the PC-1500A's own S6/S7) — no confirmed real `MEM` figure for this exact hypothetical configuration |
+
+---
+
+## 8. `ERROR 110` — "Cannot set MODE 1", and why the module configuration is the trigger
+
+`ERROR 110` is the code the PC-1600 shows when `MODE 1` (or `MODE1`) is refused. From the PC-1600 Operation Manual, Appendix F:
+
+> **110** — Cannot set MODE 1 (PC-1500 mode). / Command invalid in MODE 0. Commands associated with PC-1500 peripherals will only work in MODE 1.
+
+So one code covers two situations: (a) you asked for `MODE 1` and the hardware/module state won't allow it, and (b) you issued a CE-150/CE-158/CE-162E command while still in MODE 0. This section is about (a).
+
+### 8.1 What the manuals state as the prerequisite
+
+**TRM §5.15(1)** ("Running PC-1500/1500A BASIC programs"):
+
+> To use the PC-1600 in MODE 1, the following conditions must be satisfied:
+> 1. A RAM module of **more than 16 KB must not be installed in slot 1**, and **any RAM module must not be installed in slot 2**. However, if a RAM module is used as a RAM disk, CE-1600M can be installed in slot 1 and CE-1600M or CE-161 can be installed in slot 2. In this case, the formatting of a RAM disk (`INIT "Sn:","F"`) must be done in MODE 0.
+
+**Operation Manual, Appendix H** ("Running a PC-1500 BASIC Program on the PC-1600"):
+
+> Ensure that there is a module in slot 1 or slot 2 … the size should be **less than 16 K bytes: CE-151, CE-155, CE-159, CE-161**. If there is no module in either slot, an error code will be displayed.
+
+Read together: MODE 1 wants a module present to give the PC-1500 program its work RAM, that module must be **≤ 16 KB**, it must **not** be a bank-switched PC-1600 module, and Slot 2 is officially off-limits unless the module is a pure RAM disk formatted in MODE 0.
+
+### 8.2 Reconciling with real-hardware observation
+
+Field results reported against real units:
+
+| Slot 1 | Slot 2 | `MODE 1`? |
+|---|---|---|
+| — | — | `ERROR 110` (no work RAM available) |
+| CE-151/155/159/161 (≤16 KB, flat) | — | OK |
+| — | CE-155/161-class (≤16 KB, flat) | OK *(more lenient than the TRM's "nothing in slot 2")* |
+| CE-1600M / CE-1601M (PC-1600, bank-switched) | — | `ERROR 110` |
+| — | CE-1600M / CE-1601M (PC-1600, bank-switched) | `ERROR 110` |
+| CE-155 (8 KB, flat) | CE-163-class (2 × 16 KB, latch-banked) | `ERROR 110` |
+| CE-1600M *as RAM disk, formatted in MODE 0* | CE-1600M/CE-161 *as RAM disk, formatted in MODE 0* | OK (the TRM exception) |
+
+The deviation from the TRM's literal wording (a plain ≤16 KB module *is* tolerated in Slot 2; a combination that includes a >16 KB or latch-banked module is *not*, in either slot) points to the firmware's actual gate being:
+
+> **The RAM the LH5803 will see at 0000–3FFF must resolve to a single, flat, directly-addressable region of ≤ 16 KB with no bank switching of its own.**
+
+Everything in the table follows from that one rule:
+
+- **No module at all** → nothing backs 0000–3FFF as usable work RAM → refuse. (The internal RAM at LH5803 4000–7FFF is not enough on its own — a PC-1500 program expects its module window populated.)
+- **CE-1600M (32 KB)** → needs the connector's PVOUT/A14-equivalent to pick between its two 16 KB halves; the MODE 1 setup fixes Port 31H once and cannot half-select mid-execution on behalf of PC-1500 code that doesn't know the window is banked → refuse.
+- **CE-1601M (64 KB+)** → adds Port 28H vertical banking on top → refuse.
+- **CE-163-class** → a 2 × 16 KB PC-1500 module that latches its bank from an address-line pulse (`PC-1500-Bank-Switching.md` §9); > 16 KB and self-banking → refuse. Whether it sits in Slot 1 or Slot 2 is irrelevant; the CE-155 next to it in the other slot is fine on its own but cannot rescue the configuration.
+- **Plain ≤16 KB module (CE-151/155/159/161, or a flat modern 16 KB card), either slot** → exactly one flat bank at 8000–BFFF (Z-80) / 0000–3FFF (LH5803), no banking → the LH5803 map in §4b.6 holds → OK.
+
+The user-facing shorthand "it's the total amount of memory" is a good first approximation — the effective ceiling is one PC-1500-style 16 KB `Y0` module — but the precise trigger is *bankedness*, not a byte count: a single 32 KB flat region would fail for the same reason two flat 16 KB regions do.
+
+### 8.3 Why bankedness is fatal here (mechanism)
+
+In MODE 1 the LH5803 runs genuine PC-1500 object code that (a) addresses its RAM module linearly across the full 0000–3FFF window and (b) expects BASIC's work pointers to sit in a PC-1500-shaped map (§6). The PC-1600 firmware supports this by programming Port 31H **once** so a single flat 16 KB block occupies 8000–BFFF (Z-80) and leaving it there for the duration — there is no code path that re-banks that window per-access for the benefit of PC-1500 code, because PC-1500 code has no convention for requesting it. A module that *needs* PVOUT half-select (CE-1600M), Port 28H vertical banks (CE-1601M), or an address-strobe latch (CE-163) therefore cannot back that window, and `MODE` returns `ERROR 110` rather than enter a mode it cannot honour.
+
+The **RAM-disk exception** is consistent: a module used purely as a RAM disk contributes *nothing* to the directly-addressable 0000–3FFF window — its banking is performed per-access by the file-system driver, and the module window stays flat/free — so MODE 1 is still possible. Formatting must be done in MODE 0 because the `INIT "Sn:","F"` format path itself is native Z-80 code that isn't run from the MODE 1 environment.
+
+See `PC-1600-CPU-LH5803-Compat.md` §5 for the MODE 1 command-porting rules that go with this.

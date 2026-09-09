@@ -7,15 +7,21 @@ downward when peripherals are attached, and the named work variables inside it. 
 the reference the IOCS-routine documentation (TRM §3, still pending) builds on.
 
 **Sources:** PC-1600 Technical Reference Manual **Chapter 6** ("Work Area Used for
-BASIC") — §6.1 overview, §6.2 work-area/buffer expansion, §6.3 work-area map — read from
-the German Systemhandbuch scan.
+BASIC") — §6.1 overview, §6.2 work-area/buffer expansion, §6.3 work-area map. Originally
+from the German Systemhandbuch scan; cross-checked against the **English TRM, PDF
+pp.203–213** (§6.1 fig = p.204, §6.2 fig(a) = p.205, fig(b) = p.206, §6.3 map =
+pp.207–213). The English figures confirm §2 and §3 verbatim; they **correct** the Block A
+sub-addresses in §1 (the German scan was shifted by one slot — see §1).
 
 **Companion:** the slot / boot / bank-management addresses in this same F000H–FFFFH range
 (F0AEH/F0AFH module bitmaps, F0DCH/F0DDH boot bank, F07DH Port-3D mirror, F123H–F126H
 config, F1ABH reset cause, F015H–F05BH slot descriptors) are in
 `PC-1600-Memory-Bank-Switching.md` Part 6, not repeated here. Chapter 6 §6.3 covers the
 interpreter / editor / LCD / keyboard / plotter work variables; Part 6 covers the
-slot/bank plumbing. Together they map the region.
+slot/bank plumbing. Together they map the region. §4 below adds the `ADTBL`/`SxMTb`
+BASIC-program bank-distribution bytes (TRM §3.12.2), and
+[`PC-1600-BASIC-Program-Placement.md`](PC-1600-BASIC-Program-Placement.md) turns them
+into an injection algorithm for an emulator.
 
 ---
 
@@ -28,18 +34,34 @@ of that). It splits into five blocks:
 
 | Block | SC-7852 | LH-5803 | Contents |
 |---|---|---|---|
-| **A** | F000H–F5FFH | 7000H–75FFH | IOCS work area (F000H–); Interpreter area I (F05CH–); Editor buffer, 256 B (F1B2H–); Interpreter area II (F21DH–); preset FCB, 313 B (F31DH–); Z-80 stack, 256 B (F500H–F5FFH) |
-| **B** | F600H–F7FFH | 7600H–77FFH | PC-1500/1500A display area I (F600H–); standard variable area E$–O$ (F650H–); PC-1500/1500A display area II (F700H–); standard variable area P$–Z$ (F750H–) |
+| **A** | F000H–F5FFH | 7000H–75FFH | system pointers / slot descriptors (F000H–F05BH); then the sub-blocks in the table below |
+| **B** | F600H–F7FFH | 7600H–77FFH | PC-1500/1500A display area I (F600H–); fixed variable area E$–O$ (F650H–); PC-1500/1500A display area II (F700H–); fixed variable area P$–Z$ (F750H–) |
 | **C** | F800H–FBFFH | 7800H–7BFFH | **Used exactly as on the PC-1500/1500A** — see §1.1 |
-| **D** | FC00H–FF20H | 7C00H–… | RAM-disk area (FC00H–); Interpreter area III (FCB0H–). Expanded for the PC-1600. |
-| **E** | FF21H–FFFFH | …–7FFFH | Reserved by the PC-1600 system; used by CE-1F01A (bar-code reader software) |
+| **D** | FC00H–FF20H | 7C00H–… | RAM-file work (FC00H–); Interpreter work III (FCB0H–). Expanded for the PC-1600. |
+| **E** | FF21H–FFFFH | 7FFFH | Reserved by the PC-1600 system; used by CE-1F01A (bar-code reader software) |
 
-Block A is IOCS + interpreter + preset FCB + Z-80 stack (the stack is enlarged relative
-to the PC-1500). Block B is used as on the PC-1500/1500A: display-refresh area + standard
-string variables E$–Z$. Block D handles RAM-disks and is PC-1600-specific.
+**Block A sub-blocks (English TRM §6.1 figure, PDF p.204 — this replaces the earlier
+German-scan values, which had every label one slot too low):**
 
-The (L)/(H) sub-address labels above are read off the §6.1 figure and are approximate at
-the byte level; §3 below is the authoritative address list for the named variables.
+| SC-7852 range | Sub-block |
+|---|---|
+| F000H–F05BH | system pointers / slot descriptors (`PTR1`–`PTRG` at F030–F04F, `FBNO`/`FBBP`/`FCBPTR`; slot descriptors F015H–F05BH per `PC-1600-Memory-Bank-Switching.md` Part 6) — not sub-labelled in the figure |
+| F05CH–F1B1H | **IOCS work** |
+| F1B2H–F21CH | **Interpreter work I** |
+| F21DH–F31CH | **Edit buffer** (256 bytes = F21D…F31C exactly) |
+| F31DH–F3C6H | **Interpreter work II** |
+| F3C7H–F4FFH | **Default FCB** (313 bytes; F3C7H + 139H = F500H exactly) |
+| F500H–F5FFH | **Z-80 stack area** (256 bytes; enlarged relative to the PC-1500) |
+
+The 313-byte-FCB and 256-byte-stack sums both land exactly on F500H, which is the
+arithmetic check that this slot assignment (not the German scan's `…FCB @ F31DH, stack
+@ F500H`) is the correct one.
+
+Block B is used as on the PC-1500/1500A: display-refresh area + fixed string variables
+E$–Z$. Block D handles RAM-files and is PC-1600-specific.
+
+The (L)/(H) sub-address labels below are read off the §6.1 figure; §3 is the authoritative
+address list for the named variables.
 
 ### 1.1 Block C sub-structure (§6.1)
 
@@ -289,10 +311,52 @@ verify against the CE-1600P IOCS routines (TRM §3.7) before relying on a specif
 | F9FFH | LOCK | `LOCK`/`UNLOCK` state |
 | FB00H–FB07H | RND NUMBER | 8-byte random-number seed / state |
 
+## 4. BASIC-program bank distribution — `ADTBL` / `SxMTb` (TRM §3.12.2)
+
+When the S0 work area spans more than one 16 KB bank (a module used as expansion memory, or a program module), the interpreter stores the tokenised BASIC program **linearised across a list of banks** and records that list in the work area. `LOAD` consumes this list; it does not build it (the boot memory-config routine and `NEW`/`INIT` build it).
+
+### 4.1 The bytes
+
+| Addr | Name | Meaning |
+|---|---|---|
+| F02AH | `S0MTb` | 1-based `ADTBL` index where **S0**'s bank list starts; S0 runs from there through entry 5. Value not in 1..5 ⇒ S0 has no module banks (internal RAM only). |
+| F016H / F018H | `S1MTb` / `S1MBb` | first / last `ADTBL` index of **S1**'s bank list *when S1 is a program module*. `FEH` (anything not 1..5) ⇒ S1 is not a program module. |
+| F020H / F022H | `S2MTb` / `S2MBb` | same for **S2**. |
+| F1D6H–F1DAH | `ADTBL+1` … `ADTBL+5` | five 1-byte bank descriptors. |
+
+### 4.2 `ADTBL+n` byte encoding
+
+The bank field is stated by TRM §3.12.2 ("bank information is stored in bits 4 and 5"); the rest is **reverse-engineered from that section's two worked examples** — sample bytes `01 22 32` (Example 1) and `81 11 A2` (Example 2). Bits 3 and 6 are never set in those samples; treat them as unknown / assume 0.
+
+```
+byte == 0x00        entry unused
+otherwise:
+  bit 7            1 = LEADING bank of a program-module region
+                       (the bank carrying the 8-byte module header + 189-byte reserve)
+  bits 5-4         global bank number 0..3        bank = (byte >> 4) & 3
+  bits 3-0         physical slot the bank routes to: 1 = Slot 1, 2 = Slot 2
+```
+
+`bank` alone is enough to drive Port 31H's page-2 field; the slot nibble is redundant with the fixed bank↔slot map (banks 0/1 → Slot 1, banks 2/3 → Slot 2) and serves as a validity/consistency tag.
+
+### 4.3 Decoded examples
+
+**Example 1** — CE-159 in S1, CE-1600M in S2, **both extension memory**:
+`S0MTb=03`, `S1MTb=S2MTb=FEH`, `ADTBL = 00 00 01 22 32`.
+S0 bank list = entries 3..5 = `[bank 0/slot 1, bank 2/slot 2, bank 3/slot 2]`. The TRM: *"the program is loaded into bank 0, bank 2, bank 3, and the main memory in that order"* — **`ADTBL` slice order = fill order**, and internal RAM (`C000–FFFF`) is appended as the final segment.
+
+**Example 2** — CE-1600M in S1, CE-161 in S2, **both program modules**:
+`S1MTb=02,S1MBb=03` → S1 owns `ADTBL[2..3] = 81,11` (bank 0 *leading* + bank 1); `S2MTb=S2MBb=04` → S2 owns `ADTBL[4] = A2` (bank 2 leading); `S0MTb=05`, `ADTBL[5]=00` → S0 internal-only. Here the three regions are **independent** text streams, one per region, each `ADTBL[xMTb..xMBb]`.
+
+### 4.4 Reconstructing the placement (for an emulator injecting a tokenised image)
+
+The full, implementation-ready procedure — build the ordered S0 segment list from `S0MTb`/`ADTBL`, linearise, translate each logical offset to `(physical bank, Z-80 address)`, write, and fix up the text-end / variable pointers — is in **[`PC-1600-BASIC-Program-Placement.md`](PC-1600-BASIC-Program-Placement.md)**, together with the direct-copy-vs-simulated-store question and why `SLOT1MAP`/`SLOT2MAP` need no accounting. `PC-1600-Memory-Architecture.md` §4b.5/§4b.7 give the address-space geometry the segment list sits in.
+
 ## Open items
 
-- Exact byte boundaries of the Block A sub-regions (§1) — derive from the IOCS work-area
-  detail in TRM §3.1.2 / §3.2.2 / §3.4.2 / §3.12.2.
+- ~~Exact byte boundaries of the Block A sub-regions (§1)~~ — **resolved** from the
+  English TRM §6.1 figure (PDF p.204); see the sub-block table in §1. What F000H–F05BH
+  contains beyond `PTR1`–`PTRG` and the slot descriptors is still not itemised by §6.1.
 - The F9E0H–F9EFH overload (§3.7) — which alias is live in which printer mode.
 - CG-table pointers (CTRCGA/CTRCGB, UPACGA/UPACGB) tie into the "changing the display
   character font" feature (TRM §5.2) — cross-reference when §5 is processed.
