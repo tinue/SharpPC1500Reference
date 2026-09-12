@@ -124,7 +124,7 @@ Additional banks in 4000-7FFF:
 
 | Bank | Contents |
 |------|----------|
-| 3b | Hidden BASIC ROM (selected via Port 3DH, bit b2) |
+| 3b | Hidden BASIC ROM (selected via Port 3DH, bit b2). **Fully confirmed on real hardware** by `../../pc1600/tools/rom-dumper/` — the captured `PC1600-P1-B3B.BIN` is a byte-for-byte MD5 match with PockEmul's `rom3b.bin`, and correctly distinct from Bank 3's content. Root cause of the initial "reads identical to Bank 3" symptom: a periodic interrupt (keyboard scan / 1/64s timer tick) landing during the read/write window and resetting Port 3DH as an undocumented side effect — not a hardware fault (reproduced identically on two independent units) and not a documentation error (three independent sources — TRM, Service Manual, German Systemhandbuch — all agree on the mechanism). Fix: wrap each Port 3DH write + the immediately following read in `DI`/`EI`; for the ~17s serial send specifically, reassert Port 3DH before *every* byte (each reassert individually `DI`/`EI`-guarded, not the whole send, which needs interrupts enabled for the serial IOCS). General lesson for any PC-1600 ML program that pages a bank and then reads/writes over a non-trivial window: **interrupts must be briefly disabled around the access**, since Sharp's own interrupt handlers don't guarantee preserving undocumented latches like this one. |
 | 4 | CE-1600P Plotter/Centronics ROM |
 | 5 | CE-1600P Floppy (5000-5FFF) / Cassette (6000-7FFF) |
 
@@ -286,7 +286,28 @@ Generated internally by the SC7852 custom CPU, based on bank selection register 
 - **RAM3** is **active-high** and drives the **CE2** (second chip-enable) input of *each*
   of the two internal 8 KB RAMs.
 - **CS24** feeds the CS of a **256 Kbit** ROM; that ROM's **OE receives A15**, and the
-  16 KB window is extended to **32 KB by the A16A signal** (bank 3 sub-banking).
+  16 KB window is extended to **32 KB by the A16A signal** (bank 3 sub-banking). Verbatim
+  TRM remark: *"CS24 is an input to the CS line of 256K bits ROM. A15 is connected to OE
+  of the ROM. This 16KB space is further banked by another port signal to compose a 32KB
+  area."* — "another port signal" is Port 3DH bit b2 (Auxiliary Bank Control Ports,
+  below); this is the primary-source confirmation that Bank 3b is a real, distinct 16 KB
+  region of the CS24 chip, independent of any dump result.
+- **CS123** is likewise a **256 Kbit (32 KB)** ROM, split the same way: 16 KB is the
+  Z-80-visible Bank 6 (8000–BFFFH), the other 16 KB is the LH-5803's own ROM. Verbatim TRM
+  remark: *"This signal must be low to access the memory space of 8000H-BFFFH of bank 6.
+  The remaining 16KB area of the second half is for the LH-5803 control ROM."* This is the
+  primary-source confirmation of the empirical Stage-1 finding in
+  `../../pc1600/tools/rom-dumper/` (real hardware and emulator both) that the ordinary
+  Z-80 `BANKSET`/page-2/bank-6 path **cannot** reach the LH-5803's own ROM — physically
+  it's the other half of the same chip, reachable only via the LH-5803's own address bus
+  (the `CALLH` bridge, Part 8), not any Z-80 port combination.
+- **CS001** is the third chip of the same size: *"The ROM (64KB) selected by CS001 or
+  CS123 is cleared when a high signal is given to the INH line..."* — i.e. CS001's 32 KB
+  (all of Bank 0, 0000–7FFFH) plus CS123's 32 KB together make up "the ROM (64KB)" the INH
+  line disables as a unit. Sharp's own service-manual parts inventory lists this trio as
+  **"32KB ROM x 3"** — CS001 + CS24 + CS123, 96 KB of internal ROM silicon in total, of
+  which one 16 KB half (the LH-5803's private slice of CS123) is not reachable from the
+  Z-80 side at all.
 - **RAM2#** (Slot 1) asserts on bank **0 or 1**, 8000H–BFFFH; **RAM1#** (Slot 2) asserts
   on bank **2 or 3**, 8000H–BFFFH.
 

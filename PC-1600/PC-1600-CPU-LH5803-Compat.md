@@ -69,6 +69,18 @@ SC-7852-view (LH-5803-view in parentheses):
 
 Clobbers all Z-80 registers.
 
+**Confirmed working on real hardware** by `../../pc1600/tools/rom-dumper/pc1600-rom-dumper.asm`
+(menu option 3): a 2-byte LH-5801 stub (`lda (x)` / `rtn`, opcodes `05 9A`) placed in the
+shared `4000H–7FFFH`/`C000H–FFFFH` RAM, called via `CMDZ=30H` with `PARXL`/`PARXH` as the
+source-byte pointer and the fetched byte read back from `PARA`, dumped the LH-5803's own
+private 16KB ROM (`C000H–FFFFH`, LH-5803 view) byte-for-byte. `PARBAN=00H` worked with no
+issues — consistent with neither the stub's home nor the ROM being PV-banked. Unlike Port
+3DH (which needed careful write/read ordering plus `DI`/`EI`), a straightforward `DI`/
+`EI` around each `CALL 01C6H` was sufficient with no further iteration — `CALLH` hands the
+entire bus to the LH-5803 for its duration, so the Z-80 core structurally can't take an
+interrupt mid-handoff the way it could mid-write for a plain `OUT`. One 16384-byte dump
+(16384 `CALLH` round-trips) took ~30 seconds.
+
 The BASIC-level equivalents (TRM Appendix E/H) are `XCALL` (run LH-5803 code) vs. `CALL`
 (Z-80 code), `XPEEK`/`XPOKE` vs. `PEEK`/`POKE`, `XPEEK#`/`XPOKE#` vs. `PEEK#`/`POKE#`.
 
