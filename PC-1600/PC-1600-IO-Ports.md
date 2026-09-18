@@ -10,10 +10,14 @@ range map and the SC-7852-internal control block at 30–3FH are also summarised
 material and are cross-referenced rather than duplicated.
 
 **Sources so far:** TRM §7.1.1(3) (range map), §7.9 (the LH-5810-compatible port,
-10–1FH), §7.6 (TC8576F register select, 20–27H), §7.5 (buzzer), §7.3 (LCD, 50–5BH).
-Still pending: §3.4 (interrupt cause/mask bit detail for 32H/35H), §3.9 (timer / analog
-port), §3.6 (UART parameter/command register contents), §3.7–3.8 (78–83H peripheral
-ports).
+10–1FH), §7.6 (TC8576F register select, 20–27H), §7.5 (buzzer), §7.3 (LCD, 50–5BH); plus
+the Systemhandbuch's own port-by-port appendix (David von Oheimb, *Das Systemhandbuch für
+den PC-1600*, Appendix 6 "I/O-Adressen (Ports)", PDF pp. 94–96), which independently
+confirms and fills in detail for most of the ranges below — cited inline as "Appendix 6"
+below.
+Still pending: §3.4 (interrupt cause/mask bit detail for 32H/35H — partially filled by
+Appendix 6, §4 below), §3.9 (timer / analog port), §3.6 (UART parameter/command register
+contents).
 
 ---
 
@@ -30,9 +34,10 @@ ports).
 | 50H–57H | HD61102 LCD column driver — mostly IC2; §5 and `PC-1600-Display-HD61202.md` §3 | `E` (pin 60) |
 | 58H–5BH | HD61102 LCD column driver — mostly IC3 | `E` |
 | 60H–6FH | Slot 2 (S2) I/O, second window | `KA0#` (pin 55) |
-| 78H–7FH | CE-1600F (floppy) | — |
-| 80H–83H | CE-1600P (plotter/printer) | — |
-| 84H–BFH | Reserved for future extension | — |
+| 70H–77H | CE-1600F (floppy), **second unit** — mirrors 78H–7FH (Appendix 6) | — |
+| 78H–7FH | CE-1600F (floppy) — port-level detail in `PC-1600-Peripherals-Hardware.md` §2.6 | — |
+| 80H–83H | CE-1600P — **dual-purpose**: plotter/printer mode *and* a Centronics parallel-printer mode (Appendix 6); detail in `PC-1600-Peripherals-Hardware.md` §1.2.2/§1.3 | — |
+| 84H–FFH | Reserved for future extension | — |
 
 ## 2. The LH-5810-compatible port, 10H–1FH (TRM §7.9)
 
@@ -41,48 +46,77 @@ matching Z-80 I/O address. These drive the SC-7852's PA0–PA7 (pins 62–70, ke
 strobes), PB2/PB5/PB6/PB7 (pins 71–74), and the PC-port outputs PC6 (buzzer, pin 75) and
 SD0 (cassette write, pin 76). Not synchronised to φOS.
 
+Appendix 6 labels the whole block "compatible to the PC-1500's port chip **LH-5811**" (an
+earlier draft of this doc, sourced from TRM §7.9 alone, called it LH-5810/LH-5811 —
+kept as-is, not a contradiction: Sharp's port-compatible chip family covers both part
+numbers across the PC-1500 line). It also adds two registers TRM §7.9 doesn't name here:
+
 | Reg | I/O addr | Purpose |
 |---|---|---|
+| — | 14H write | divider reset (`Teiler-Reset`) |
+| — | 15H read | `U` register — serial receive |
+| — | 16H write | `L` register — serial transmit |
+| — | 17H write | `F` register — serial-output modulation |
 | OPC | 18H | PC-port output buffer |
+| — | 19H | `G` register — wait control / baud rate |
 | MSK | 1AH | interrupt mask (LH-5810-style path) |
 | IF | 1BH | interrupt flags |
 | DDA | 1CH | PA port direction |
 | DDB | 1DH | PB port direction |
-| OPA | 1EH | PA port output buffer / input latch |
+| OPA | 1EH | PA port output buffer / input latch — used for the **keyboard strobe** (Appendix 6) |
 | OPB | 1FH | PB port output buffer / input latch |
 
 ### 2.1 MSK register — 1AH
 
-Write (mask; bit = 1 → interrupt enabled):
+Write (mask; bit = 1 → interrupt enabled). **Corrected/completed against Appendix 6** —
+the TRM excerpt previously transcribed here missed a bit (there is no "unused b2"; it's a
+second serial flag):
 
 | Bit | Mask for |
 |---|---|
-| b0 | **IRQ** |
+| b0 | **IRQ** (PC-1500-peripheral interrupt) |
 | b1 | **PB7** (BREAK/ON key status from the sub-CPU) |
-| b3 | **flag TD** (serial-transfer-complete) |
-| b2, b4–b7 | unused |
+| b2 | **TD** — sender/transmit flag |
+| b3 | **RD** — receiver flag |
+| b4–b7 | unused |
 
-Read layout (upper nibble = live signal states, lower nibble = the mask bits):
+Read layout (upper nibble = live signal states, lower nibble = the mask bits from 1Aw
+above — Appendix 6 names the upper-nibble signals `RD`/`TD` where an earlier draft of
+this doc, from the TRM alone, had the less-specific pin names `CL1`/`SD1`):
 
 ```
  b7    b6    b5    b4    b3     b2     b1     b0
- CL1   SD1   PB7   IRQ   MSKb3  MSKb2  MSKb1  MSKb0
+ RD    TD    PB7   IRQ   MSKb3  MSKb2  MSKb1  MSKb0
+(CL1)  (SD1)
 ```
 
-### 2.2 IF register — 1BH (TD is read-only)
+### 2.2 IF register — 1BH
+
+A flip-flop per bit, retained until explicitly cleared — same bit assignment as the MSK
+register above:
 
 | Bit | Name | Meaning |
 |---|---|---|
 | b0 | IF0 | set to 1 on the **rising edge of IRQ** |
 | b1 | IF1 | set to 1 on the **rising edge of PB7** |
-| b3 | TD | 1 when a serial data transfer completes; cleared to 0 when the CPU loads the serial data into the register. Read-only. |
-| b2, b4–b7 | X | unused |
+| b2 | TD | serial-transmit-complete flag |
+| b3 | RD | serial-receive flag; cleared when the CPU loads the received serial data — the earlier draft of this doc placed this "TD, read-only" at b3 instead, based on the TRM excerpt alone; Appendix 6 clarifies there are **two** independent flags (TD at b2, RD at b3), not one |
+| b4–b7 | X | unused |
 
 ### 2.3 DDA / DDB — 1CH / 1DH (direction)
 
 For each bit *i*: `0` → PAi / PBi is **input**; `1` → **output**, driving the content of
 OPAi / OPBi. (DDB: the scan shows b5/b6 unmarked; the PB pins actually used are PB2 (b2),
 PB5 (b5), PB6 (b6), PB7 (b7) — treat b0/b1/b3/b4 as don't-care.)
+
+**OPB pin meanings (Appendix 6, register 1FH):**
+
+| Bit | Signal |
+|---|---|
+| b7 | BREAK key |
+| b6 | keyboard strobe #8 |
+| b5 | 1/64-second pulse |
+| b2 | cassette-receive input |
 
 ### 2.4 OPA / OPB — 1EH / 1FH (buffer)
 
@@ -104,6 +138,14 @@ Buffer for data sent to the PC port. The data bus can also be latched into OPC o
 
 (Pin-level gate logic: `PC6 = NAND(PB2, PC6', PC7', SD0)`, `SD0 = OR(SD0', PC7')` —
 `PC-1600-CPU-SC7852-Z80.md` §6, pins 75/76.)
+
+**Discrepancy, not resolved.** Appendix 6's own one-line gloss for register 18H reads
+"b7: buzzer line (active = 0), b6: buzzer on" — i.e. it describes *both* bits as
+buzzer-related, disagreeing with the pin-level table above (b7 = cassette write, b6 =
+buzzer) which is corroborated by the gate-logic equations in `PC-1600-CPU-SC7852-Z80.md`
+§6. The gate-logic-corroborated reading is kept as authoritative; the Appendix 6 gloss is
+flagged here in case it turns out to reflect a real polarity/aliasing detail this doc is
+missing.
 
 ### 2.6 Relationship to the 32H/35H interrupt system
 
@@ -133,6 +175,13 @@ read/write direction:
 low on any I/O access to 20H–27H. The UART's own `INT` output (logical OR of RXRDY,
 TXRDY, PRRDY, PTRDY) reaches the SC-7852 on `INT0` (pin 81).
 
+**Port 21H dual use (Appendix 6).** Besides parallel data out, port 21H doubles as the
+**command port for the sub-CPU timer/RTC/analog block** when not in use for parallel
+I/O — i.e. this address is shared between the Centronics-parallel path and the timer
+dispatcher (§7 below), not exclusive to one function. 24H–27H mirror 20H–23H but are
+"incompletely decoded" (Appendix 6's own wording) — treat them as unreliable aliases,
+not a second independent register block.
+
 **Baud rate:** the IC's clock input is divided by a programmable 4-bit prescaler →
 SYS-CLK, then by a programmable 12-bit divider (the baud-rate generator) → any rate
 50–38400 baud. Programmed via the parameter register (port 22H write) and command
@@ -149,6 +198,26 @@ Summary: **31H** = primary bank-select register; **32H/35H** = interrupt cause /
 LHS1–3 remap; **3DH** = hidden-ROM / extended-address latch; **37H** bit 4 = LCD-clock
 (`CK0`) enable. Writing wrong values anywhere in 30H–3DH makes the machine malfunction
 (TRM note).
+
+**Appendix 6's own per-address gloss**, useful confirmation/completion of the summary
+above (some entries not previously itemised in this corpus — reconcile fully against
+`PC-1600-CPU-SC7852-Z80.md` §7.2 before treating as authoritative on its own):
+
+| Addr | Op | Function |
+|---|---|---|
+| 31H | write | bank switching |
+| 32H | read | interrupt cause |
+| 33H | read | input from the timer |
+| 34H | — | interrupt mask for the LH-5803 |
+| 35H | — | interrupt mask for the Z-80 |
+| 37H | write | b4 = LCD-processor clock on |
+| 37H | read | input from the keyboard matrix |
+| 38H | write | switch control between the two CPUs |
+| 39H | write | low byte of the indirect interrupt address (IM2) |
+| 3AH, 3BH | — | unused |
+| 3CH | write | **SLOTMAP** (slot remapping); readback of the current value is kept at `F08DH` (`PC-1600-Work-Area-Map.md`) |
+| 3DH | write | bank-select for BASIC-ROM vs. JAPAN-ROM: b2 = `4000H`–`7FFFH` is Bank 3 (normal ROM module) when set, else BASIC-ROM; b1 = `8000H`–`BFFFH` is Bank 4 (JAPAN-ROM) when set, else BASIC-ROM. Readback kept at `F07DH` |
+| 3EH, 3FH | — | unused |
 
 ## 5. LCD ports, 50H–5BH
 
@@ -208,7 +277,7 @@ The sub-CPU (LU-57813P) owns the real-time clock, the wakeup/alarm timers, and a
 | SRA2 | 1AH | read the digitised **battery voltage** |
 | SWAB | 22H | set the alarm-signal-generation condition |
 | SRAB | 23H | read the alarm-signal-generation condition (as set by SWAB) |
-| SWA1A | 24H | set the trigger thresholds for a software interrupt on the analog-input value |
+| SWA1A | 24H | set the trigger thresholds for a software interrupt on the analog-input value — thresholds are stored at `F12DH` (lower) / `F12EH` (upper), `PC-1600-Work-Area-Map.md` §3.9 |
 
 ### 7.1 Sub-CPU interrupt bitfield (SWMSK / SRMSK / SRIRQ, in `A`)
 
@@ -253,5 +322,10 @@ against the TRM.
 - §3.9: the SWRT/SRRT RTC param-block byte layout; the ADC value range/scaling for
   SRA0/SRA1/SRA2; the SWPON power-on-condition mask bits.
 - §3.6.2 / §7.6: TC8576F parameter-register and command-byte formats.
-- §3.7 / §3.8: CE-1600P (80–83H) and CE-1600F (78–7FH) port detail.
+- ~~§3.7 / §3.8: CE-1600P (80–83H) and CE-1600F (78–7FH) port detail~~ — **resolved**
+  (2026-09-18, Systemhandbuch Appendix 6): full detail now in
+  `PC-1600-Peripherals-Hardware.md` §1.2.2/§1.3 (plotter/Centronics dual-mode) and §2.6
+  (floppy port-level command/status registers).
 - Confirm the 50–5FH LCD per-port decode against real hardware.
+- OPC (18H) buzzer-bit discrepancy between Appendix 6's gloss and the gate-logic-derived
+  table (§2.5) — not resolved, flagged in place.

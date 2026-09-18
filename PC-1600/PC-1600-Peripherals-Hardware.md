@@ -8,9 +8,10 @@ their own document (`PC-1600-Memory-Modules.md`); the serial interface has
 `PC-1600-Serial-Commands.md` / `PC-1600-Serial-Hardware-Notes.md`.
 
 **Sources:** PC-1600 Technical Reference Manual §3.7 (printer IOCS), §3.8 (disk IOCS) —
-read from the German Systemhandbuch scan; plus `PC-1600_Service_Manual.pdf`'s CE-1600P
-chapter (pp. 63–72, electrical hardware; §1.2 below) and CE-1600F chapter (pp. 98–104,
-electrical/mechanical hardware; §3.1 below).
+read from the German Systemhandbuch scan (David von Oheimb, *Das Systemhandbuch für den
+PC-1600*, ch. 13 "Diskettenlaufwerk", PDF pp. 46–53); plus `PC-1600_Service_Manual.pdf`'s
+CE-1600P chapter (pp. 63–72, electrical hardware; §1.2 below) and CE-1600F chapter
+(pp. 98–104, electrical/mechanical hardware; §3.1 below).
 Processed so far: TRM **§3.7**, TRM **§3.8**, Service Manual **CE-1600P ch.** (§1.2),
 Service Manual **CE-1600F ch.** (§3.1). Pending: TRM Ch 8 (general peripheral hardware
 chapter); CE-1600P's own mechanical/pen-mechanism repair chapter (out of scope for
@@ -155,6 +156,46 @@ So: **Z-motor (pen up/down + color change) is entirely on port 82H**, while **X-
 (carriage) and Y-motor (paper feed) share port 83H**, 4 bits each — an emulator's
 plotter-stepper model should treat writes to 83H as *simultaneously* updating both X and
 Y coil state from one byte, not as two separate operations.
+
+**Bit-name translations (Systemhandbuch Appendix 6, "I/O-Adressen").** The service
+manual's own pin/signal names above are cryptic; the Systemhandbuch's port appendix gives
+plain-language meanings for the same 80H–83H bits, confirming the mapping end to end:
+
+Bit-for-bit match against the 80H write (FF1) row in §1.2.2's table above:
+
+| Bit | Service-manual name | Appendix 6 meaning |
+|---|---|---|
+| b5 | Printer-CR-INT-en | print head at the left home-stop/carriage-return position |
+| b4 | Printer-SW-INT-en | print switch |
+| b3 | FD-INT-en | floppy-drive interrupt ("Disk") |
+| b2 | Reverse-PF-key-INT-en | reverse paper-feed key |
+| b1 | PF-key-INT-en | paper-feed key |
+| b0 | CC-key-en | **C**olor-**C**hange key ("Farbwechsel-Taste") — confirms the abbreviation |
+
+Plus, from the 81H-read and 82H rows: `CMT-input` (81H read b7) = cassette-recorder
+receive line; `CMT-in-Enable` (82H b7) = cassette-recorder interface enable.
+
+### 1.3 Centronics parallel-printer mode (Appendix 6) — same ports, alternate function
+
+Ports 80H–83H are **dual-purpose**: besides the plotter-control function in §1.2.2, the
+same four addresses also serve a **Centronics parallel-printer interface** — not
+documented anywhere else in this corpus. Presumably the gate array's `DC3` decoder
+(§1.2.2's internal-block description) selects between the two personalities based on a
+mode bit elsewhere (not identified by this source); this needs confirmation against real
+hardware or a ROM disassembly.
+
+| Addr | Op | Plotter-mode meaning (§1.2.2) | Centronics-mode meaning |
+|---|---|---|---|
+| 80H | write | interrupt mask (6 key/status bits) | interrupt mask — only b3 (Disk) is called out |
+| 81H | write, b0 | FD reset | FD reset (same) |
+| 81H | read | interrupt cause, mirrors 80H's bit layout | b3 = disk interrupt, b0 = **Busy** |
+| 82H | — | CMT-interface enable + RMT ON/OFF + pen (Z) motor, 4 bits | **handshake lines**: b5 = `EXPRM`, b4 = `STROBE` |
+| 83H | — | X/Y motor phases, 4+4 bits | **parallel data** byte |
+
+The Centronics-mode 82H handshake bits (`STROBE`/`EXPRM`) and 83H parallel-data byte are
+exactly the classic Centronics protocol signals — this all but confirms the CE-1600P can
+drive a generic Centronics parallel printer directly, alongside its own plotter mechanism
+and the CE-1600F floppy, through the same 60-pin connector block.
 
 **Gate array pin description (64-pin gate array, LR38045):**
 
@@ -342,6 +383,16 @@ A 2.5″ floppy drive that connects **through the CE-1600P** (it cannot run stan
 Its ROM is `EXROM5` (Bank 5); its disk format is the same FAT family as the RAM-disk
 memory file (`PC-1600-Filesystem.md`).
 
+> **Bank number note.** The Systemhandbuch's own "13. Diskettenlaufwerk" chapter (Ditze/
+> von Oheimb, pp. 46–53) writes the dispatch call as `CALL 4008H, Bank 4` for the disk
+> IOCS routines below — but `PC-1600-IOCS.md` §3.8 and this file both independently say
+> **Bank 5**, and §1.2.1 above already establishes that the CE-1600P's single 32KB
+> physical ROM chip holds printer, cassette, *and* floppy driver code, bank-switched into
+> at least two logical banks (4 for printer entry points, per §1.1 above). Given two
+> independent sources agree on Bank 5 and "4"/"5" are an easy scan/OCR digit confusion,
+> this is very likely a transcription slip in that source, not a real discrepancy —
+> flagged for confirmation on real hardware rather than silently corrected.
+
 ### 2.1 Disk geometry (§3.8.2)
 
 | Property | Value |
@@ -354,6 +405,16 @@ memory file (`PC-1600-Filesystem.md`).
 | Number of FATs | 2 |
 | Logical sectors per cluster | 1 |
 | Max files per side | 48 |
+
+The Systemhandbuch's own summary of this table (ch. 13, "Physikalisches
+Aufzeichnungsformat") writes "**10** Spuren, **08** Sektoren, 200H Bytes/Sektor = 64d KB
+pro Seite (unformatiert)" — all in hex like the rest of that source, so "10" = `10H` =
+16 decimal, consistent with the table above (10H × 8 × 200H = 64 KB checks out).
+
+**DISKCOPY utility.** Undocumented elsewhere in the TRM: `CALL Bank 5, 5FF0H` runs a
+built-in whole-disk-copy program (with its own guided UI) — but only when **both** RAM
+module slots are fully populated to 64 KB total, since it uses that RAM as an
+intermediate buffer for a full disk side.
 
 ### 2.2 Logical-sector layout (§3.8.3(1))
 
@@ -378,38 +439,68 @@ Byte 0 = format ID = **F2H** (for this floppy). Bytes 1–122 = one entry per cl
 ### 2.4 IOCS routines (§3.8.4)
 
 **Dispatch:** (1) set parameters; (2) IOCS number → **C**; (3) `CALL Bank 5, 4008H`. The
-IOCS work area must be reserved first. **Drive number**: `01H` = X drive, `02H` = Y drive
-(two drives supported).
+IOCS work area must be reserved first. **Drive number** (in `A`): `01H` = X drive, `02H`
+= Y drive (two drives supported).
 
-**Error code in `A`** (bit set = that error):
+**Error code in `A`** (bit set = that error; `A = 00H` on success). Systemhandbuch ch. 13
+gives noticeably more precise per-bit meanings than the TRM excerpt previously
+transcribed here — kept as the authoritative reading, TRM-style wording in parens where
+it differs:
 
 | Bit | Meaning |
 |---|---|
-| 0 | drive not ready / timeout |
-| 1, 2 | read/write error |
-| 3 | sector not found |
-| 4 | head-seek error |
-| 5 | disk write-protected |
-| 6 | battery voltage too low |
-| 7 | other (e.g. no disk in the drive) |
+| 7 | no floppy in the drive |
+| 6 | battery empty/low |
+| 5 | disk write-protected (WP tab set) |
+| 4 | track not found (head-seek error) |
+| 3 | sector not found — disk not formatted |
+| 2 | file-end exceeded during the operation |
+| 1 | write or read error |
+| 0 | hardware error / other |
+| *(`A`=00H with CF/error flagged another way)* | verification error (`DVERIFY`/`HFVERIFY` mismatch) |
 
 | Name | # | Function |
 |---|---|---|
 | DSKINIT | 80H | initialise the drive (A = drive number) |
 | CNCTDRV | 81H | how many drives are connected |
-| RESTORE | 82H | seek the head to track 0 |
+| RESTORE | 82H | seek the head to track 0 (may prompt "set diskette for..." if none present) |
 | FORMAT | 83H | format the disk |
-| DREAD | 84H | read one sector |
-| DWRITE | 85H | write one sector |
-| DVERIFY | 86H | compare a sector against memory |
-| GETDRVST | 87H | read the drive status |
-| HFREAD | 88H | read the first half (256 B) of a sector |
-| HFVERIFY | 89H | compare the first half of a sector against memory |
+| DREAD | 84H | read absolute sectors → `(HL)`. **B** = sector count (byte count transferred = count × `200H`); **D** = track number of the first track (`00`–`0FH`); **E** = number of the first sector (`00`–`07H`) |
+| DWRITE | 85H | write absolute sectors from `(HL)`; params as `DREAD` |
+| DVERIFY | 86H | compare sectors against `(HL)`; params as `DREAD` |
+| GETDRVST | 87H | read drive status → `A`: b7 = drive motor off, b6 = no WP (valid only while motor on and disk in drive), b3 = disk in drive, b2 = disk was changed (valid only if b0 set), b0 = a disk operation is in progress |
+| HFREAD | 88H | read 100H bytes (half a sector) from track **D**, sector **E**, → `(HL)` |
+| HFVERIFY | 89H | compare 100H bytes against `(HL)`; params as `HFREAD` |
 
 ### 2.5 Power-on (§3.8.5)
 
 When a drive is attached, the drive runs its own initialisation sequence at power-on
 (details not transcribed).
+
+### 2.6 Port-level command/status registers, 78H–7FH (Systemhandbuch Appendix 6)
+
+The DREAD/DWRITE/etc. IOCS routines in §2.4 above are software wrappers around this raw
+port interface — the CE-1600P side of the `IO7N`-decoded 70H–7FH range from §3.1.2/§3.1.6
+(there described only at the bus-signal level: `D0–D7`/`A0–A2`/`CS0`/`WR`/`RD`). This is
+the first source in this corpus to give the actual register meanings at those addresses.
+70H–77H is a second, identical port block (mirrors 78H–7FH) — presumably for a second
+drive unit, consistent with the two-drive (X/Y) model in §2.4.
+
+| Addr | Op | Function |
+|---|---|---|
+| 78H | write | command register: `40H` = read, `60H` = write, `A0H` = format |
+| 78H | read | motor/disk status: b7 = motor not yet up to speed, b6 = no write-protect, b3 = disk in drive |
+| 79H | write | sector register |
+| 7AH | write | motor control: b7 = motor on |
+| 7AH | read | status: b6 = disk changed, b1 = ready, b0 = error (inverted) |
+| 7BH | — | data read/write |
+| 7CH–7FH | — | unused |
+
+This is a much simpler abstraction than a raw FDC register set — consistent with §3.1's
+own finding that the real FDC gate array lives *inside* the FDU-250 mechanism, reached
+over its own 25-pin `CS0`/`A0–A2`/`D0–D7` bus (§3.1.2); this 78H–7FH block is the
+CE-1600P-side command/status shim in front of that, which the IOCS routines in §2.4 talk
+to directly.
 
 ## 3. Peripheral hardware (TRM Ch 8 / Service Manuals)
 

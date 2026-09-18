@@ -8,8 +8,10 @@ memory files and CE-1600F floppies.
 
 **Sources:** PC-1600 Technical Reference Manual §3.3 ("Files") — §3.3.1 file types &
 management, §3.3.2 file IOCS routines, §3.3.3 memory-file structure — read from the
-German Systemhandbuch scan. §3.8.3 (floppy geometry, directory-entry format) is
-**pending** and is cross-referenced where §3.3 defers to it.
+German Systemhandbuch scan. TRM §3.8.3 (floppy geometry, directory-entry format) and the
+RAM-disk-specific IOCS/work-area material in §6–§7 below are from the same Systemhandbuch
+(David von Oheimb, *Das Systemhandbuch für den PC-1600*), ch. **13 "Diskettenlaufwerk"**
+and ch. **14 "Dateien"** (PDF pp. 46–53, printed pp. 45–52).
 
 ---
 
@@ -17,7 +19,8 @@ German Systemhandbuch scan. §3.8.3 (floppy geometry, directory-entry format) is
 
 The PC-1600 handles three file types:
 
-1. **ASCII files** — no header.
+1. **ASCII files** — no header. Lines are separated by **CR+LF** (`0DH 0AH`); end of file
+   is marked by an **EOF byte, `1AH`**.
 2. **BASIC program files** — tokenized ("intermediate code").
 3. **Machine-language program files.**
 
@@ -47,7 +50,14 @@ that offset +00H doubles as the "is this ASCII?" discriminator.
 BASIC manages an open file through a **57-byte FCB** followed by a **256-byte buffer** —
 **313 bytes** per file, allocated according to the `MAXFILES` command. (The 313-byte
 figure also appears as the preset-FCB reserve in `PC-1600-Work-Area-Map.md` §1 and the
-`Creg 10` file-buffer allocation in `PC-1600-Memory-Bank-Switching.md` Part 6.)
+`Creg 10` file-buffer allocation in `PC-1600-Memory-Bank-Switching.md` Part 6; the
+Systemhandbuch's own text reads "im Abstand von 139 Bytes", almost certainly an OCR/scan
+digit-order slip for "313" — the FCB's own byte layout below runs `+00H`..`+138H`
+inclusive, which *is* 313 (`139H`) bytes, so the two sources agree once read correctly.)
+
+**Preset FCB.** The standard FCB used internally by `(B)LOAD`/`(B)SAVE` lives at a fixed
+address, **`F3C7H`–`F4FFH`**. All other FCBs must be reserved via `MAXFILES` and are laid
+out back-to-back, 313 bytes apart, starting at the address held in **`F04EH`**.
 
 | Off | Name | Field | Notes |
 |---|---|---|---|
@@ -65,8 +75,28 @@ figure also appears as the preset-FCB reserve in `PC-1600-Work-Area-Map.md` §1 
 | +21H..+22H | FDAT | date of creation | packed `[year][month][day]`; **year = offset from 1980** (FAT-style) |
 | +23H..+24H | FCLUS | first cluster number | |
 | +25H..+28H | FSIZE | file size in bytes | 4 bytes, low → high |
-| +29H..+38H | FFRE | per-device work area | 16 bytes; holds **current record** (≈ +30H) and **current block** (≈ +31H) — **128 records per block**; current record is set to `00H` by `OPEN`/`CREATE` and incremented by each `SEQUENTIAL RD`/`WR` (range `00H`–`7FH`) |
+| +29H..+38H | FFRE | per-device work area | 16 bytes — see the precise sub-fields below |
 | +39H.. | — | file buffer | 256 bytes |
+
+`+09H..+28H` (32 bytes) is literally a **copy of the file's directory entry** (name,
+extension, attribute, time, date, first cluster, size — same byte layout as §5.4 below),
+not independently-named FNAM/FEXT/etc. fields — the names above are this doc's own gloss,
+kept for readability.
+
+**`FFRE` (+29H..+38H) sub-fields**, precise reading from the Systemhandbuch (ch. 14,
+"Struktur des FCB") — supersedes the vaguer "holds current record/block" note previously
+here:
+
+| Off | Field | Notes |
+|---|---|---|
+| +29H | current cluster number | the cluster currently being processed during sequential access |
+| +2BH | clusters-processed count | how many clusters of this file have already been walked |
+| +2DH | cluster number in FAT | — |
+| +2EH | bytes per logical block | constant `0100H` (256) |
+| +30H..+32H | logical-block counter | — |
+| +33H..+35H | — | unused |
+| +36H | flags | b0 = FCB modified; b1 = file content modified |
+| +37H..+38H | — | `00H` |
 
 ## 3. File IOCS routines (§3.3.2)
 
@@ -75,33 +105,39 @@ number in the **C register**; (3) `CALL 01DEH`. On return **every register is de
 except A**:
 
 - `A = 00H` — normal completion.
-- otherwise `A` is an **error bitfield**:
+- otherwise `A` is an **error bitfield** (Systemhandbuch ch. 14 wording, more precise
+  than the earlier TRM-paraphrase kept in parens):
 
 | Bit | Meaning |
 |---|---|
-| 7 | addressed device does not exist |
-| 6 | device access failed |
-| 5 | media error on the addressed device |
-| 4 | this IOCS routine is not supported by that I/O |
-| 3 | other |
-| 2 | no more data to read |
-| 1 | no space left to write on the medium |
+| 7 | wrong/nonexistent device |
+| 6 | device error |
+| 5 | no floppy inserted (media error on the addressed device) |
+| 4 | wrong function code (routine not supported by that I/O) |
+| 3 | hardware error / other |
+| 2 | file-end exceeded (no more data to read) |
+| 1 | disk full (no space left to write) |
 | 0 | file not found, or directory full |
+
+`SEARCH FIRST`/`SEARCH NEXT`/`DELETE FILE` (`11H`–`13H`) and the `GET ALLOC`/`GET LENGTH`
+pair (`1BH`, `23H`) are **not available for `COM:`/`CAS:`** devices — sequential-access
+serial and cassette channels have no directory to search or size to report.
 
 | Routine | IOCS # | Function |
 |---|---|---|
 | OPEN FILE | `0FH` | open a file |
 | CLOSE FILE | `10H` | close a file |
-| SEARCH FIRST | `11H` | find the first directory entry |
-| SEARCH NEXT | `12H` | find the next directory entry |
-| DELETE FILE | `13H` | delete a file |
-| SEQUENTIAL RD | `14H` | sequential read |
-| SEQUENTIAL WR | `15H` | sequential write |
-| CREATE FILE | `16H` | create a file |
-| RENAME FILE | `17H` | rename a file |
+| SEARCH FIRST | `11H` | find the first directory entry (wildcards allowed in the name, `?` per character) |
+| SEARCH NEXT | `12H` | find the next directory entry matching the pattern set by `SEARCH FIRST` |
+| DELETE FILE | `13H` | delete a file (wildcards allowed) |
+| SEQUENTIAL RD | `14H` | sequential read of one logical block (256 bytes) |
+| SEQUENTIAL WR | `15H` | sequential write of one logical block |
+| CREATE FILE | `16H` | create a file (for writing) |
+| RENAME FILE | `17H` | rename a file — replaces `DE+09H..+13H` with `DE+29H..+33H`; wildcards allowed |
 | SET DMA | `1AH` | set the transfer (DMA) address |
-| GET ALLOC | `1BH` | read medium/file allocation info (e.g. free-cluster count) |
+| GET ALLOC | `1BH` | medium/file allocation info: `DSKF` in bytes = `BC × E × HL` (`BC` = bytes/sector, `E` = sectors/cluster, `HL` = number of free clusters); also sets file attributes from `DE+14H` |
 | SET ATTRB | `1EH` | set file attributes |
+| GET LENGTH | `23H` | logical block count of the file → `DE` = high word, `HL` = low word |
 
 ## 4. Memory files (RAM-disk) — physical structure (§3.3.3(1))
 
@@ -204,6 +240,20 @@ sectors 1–2 and the directory starts at 3.)
 From the TRM scan (not in this ROM's table — spec only): the 1024 KB
 row would be `FFH | 07H | 04H | 2 | FEH | 0018H | 00FEH | 0003H`.
 
+**Possible discrepancy, 128 KB (F4H) row.** The Systemhandbuch's own printed geometry
+table (ch. 14, covering 16/32/64/128 KB) agrees with the ROM-derived table above for
+every field of every row it lists — **except** first-data-sector for F4H, which it gives
+as `0008H` against the ROM's `000BH`. Not resolved here (the floppy drive itself only
+ever uses the F2H/64KB row per §2.1, so this only matters for larger RAM-disk modules);
+flagged for a future cross-check against real 128 KB RAM-disk hardware or another ROM
+dump.
+
+**Media ID table pointer.** Distinct from the `5006H`-based per-row table above, the
+Systemhandbuch also describes a **pointer** to the media-ID/geometry data, factory-set to
+`4242H`, held in the disk buffer (§7 below) and changeable by software — this may be an
+indirection layer in front of the fixed ROM table rather than a second copy of it; not
+yet reconciled with the `5006H` addressing.
+
 #### The table is INIT-only
 
 Mount and `DSKF` do **not** re-consult this table for a formatted medium.
@@ -237,17 +287,47 @@ FCB's FAT-style packed date/time (§2) confirms the family resemblance to MS-DOS
 
 | Off | Size | Field |
 |---|---|---|
-| 00H–07H | 8 | file name (space-padded, `20H`) |
+| 00H–07H | 8 | file name (space-padded, `20H`); `E5H` = deleted entry |
 | 08H–0AH | 3 | extension (space-padded) |
-| 0BH | 1 | attribute — b0: 0 = read/write, 1 = read-only; b1–7 reserved |
+| 0BH | 1 | attribute/"Set-Code" — see below; default `20H` |
 | 0CH–15H | 10 | reserved (always `00H`) |
-| 16H–17H | 2 | update time — packed `[hour][minute][second/2]` |
-| 18H–19H | 2 | update date — packed `[year][month][day]` (year from 1980) |
+| 16H–17H | 2 | update time — bit-packed, see below |
+| 18H–19H | 2 | update date — bit-packed, see below |
 | 1AH–1BH | 2 | first cluster number — `1AH` = the number, `1BH` = always `00H` |
 | 1CH–1FH | 4 | file size in bytes, low → high |
 
 (On a floppy the directory is logical sectors 3–5 = 48 entries per side. The RAM-disk
-directory area is located by the boot sector's directory-area pointer, §5.2.)
+directory area is located by the boot sector's directory-area pointer, §5.2 — e.g. on a
+2×32KB-module `S2:` example in the Systemhandbuch, the directory sits at absolute address
+`8600H`.)
+
+**Attribute/"Set-Code" byte (`+0BH`), normal value `20H`:**
+
+| Bit | Meaning |
+|---|---|
+| b0 (`"P"`) | write-protected |
+| b1 (`"I"`) | meaning not confirmed by the source (marked `?`) |
+| b2 | hidden from the `FILES` command's listing |
+| b5 | always set (part of the `20H` default) |
+
+**Update time+date (`+16H`–`+19H`).** The source's own bit-position header (`b7 b6 b5
+b4 b3 b2 b1 b0`) is given once and covers all four bytes; the scan is low-resolution
+enough here that the exact bit boundaries are **not fully reliable** — transcribed as
+literally as legible, re-check against the original before relying on it:
+
+- `+16H`: minute, low bits (b2–b0), rest `0`
+- `+17H`: hour (b4–b0) in the low bits, with minute's higher bits apparently continuing
+  into the top bits (b7–b5) of this same byte
+- `+18H`: month, low bits (b2–b0), with day occupying the higher bits (b4–b0 overlap as
+  read — likely day in b7–b3)
+- `+19H`: mostly `0`, with one more bit of month (b3) in bit 0
+
+This reads as a minute/hour/day/month bitfield split unusually across the byte pair
+boundaries rather than the classic single-word FAT packing — plausible given the PC-1600
+has no cluster-year field here at all (contrast the FCB/directory's separate FAT-style
+`FTIM`/`FDAT` words elsewhere, which — per §2 above — pack `[hour][minute][second/2]` and
+`[year][month][day]` in the conventional MS-DOS-FAT layout). Treat this specific 4-byte
+breakdown as provisional.
 
 ### 5.5 Patching the header past INIT's 256 KB ceiling
 
@@ -279,9 +359,87 @@ with `MAXCLS` reduced by the carve:
   format-ID copy) in both vbanks → `FBH`; boot-sector checksum at `02H`
   recomputed per §5.1.
 
+## 6. RAM-disk IOCS routines (Bank 3) — Systemhandbuch ch. 14
+
+A separate routine table from the file-IOCS one in §3 — these are the **RAM-disk's own
+low-level driver routines** (parallel to the CE-1600F's disk-IOCS table in
+`PC-1600-Peripherals-Hardware.md` §2.4, but for the built-in RAM-disk modules instead of
+the floppy). **Dispatch:** IOCS number → `C`, slot number → `A` (`01H` = `S1:`, `02H` =
+`S2:`), `CALL Bank 3, 4008H`.
+
+| Name | # | Function |
+|---|---|---|
+| SET ID | `80H`–`87H` | same meaning as the corresponding CE-1600F routine (`PC-1600-Peripherals-Hardware.md` §2.4) |
+| SET ID | `88H` | set the Media ID block, `(HL)+00H`..`(HL)+12H` |
+| SECTSET | `89H` | bank-select by logical sector number; `DE` = logical sector number, → address in `HL` |
+| LOGREAD | `8AH` | read sectors (count in `B`, `200H` bytes each) into `(HL)`; `DE` = number of the first **logical** sector (not track/sector) |
+| LOGWRITE | `8BH` | write sectors from `(HL)`; params as `LOGREAD` |
+| GET DISKSIZ | `8CH` | RAM-disk size in 16 KB units → `C` |
+| GET RAMSIZ | `8DH` | installed RAM size in the slot given in `A` → `D` (16 KB units), `E` (remainder, 4 KB units) |
+| SEARCH BOOT | `8EH` | search for a bootable program; found → `NC` (carry clear) and slot number written to `FC16H` |
+| START BOOT | `8FH` | start (run) the boot program |
+| SET DISKSIZ | `90H` | set the RAM-disk size, in 2 KB units, written to `F055H` (`S1:`) or `F05BH` (`S2:`) |
+
+(The line "`c80–c87` sinngemäß wie bei der Diskettenstation" in the source means these
+share the same function-code meanings as CE-1600F's `80H`–`87H` block — `DSKINIT`
+through `HFVERIFY` — just addressed to Bank 3/RAM-disk instead of Bank 5/floppy; `88H`
+onward is where the RAM-disk table diverges with its own routines.)
+
+## 7. Disk buffer and IY-register work area — Systemhandbuch ch. 14
+
+**Disk buffer.** Reserved at `CALL 4002H` (with `A` = `00H`/`01H`) reset time; its start
+address is held at **`F038H`** (a generic 2-byte pointer slot per
+`PC-1600-Work-Area-Map.md` §1 — this is its disk-specific use). Layout:
+
+| Off | Size | Field |
+|---|---|---|
+| +000H–+1FFH | 512 B | buffer for one data or directory sector |
+| +200H | 1 | which drive's sector is buffered: `01H` = "X", `02H` = "Y" |
+| +201H–+20BH | 11 | name of the file currently present in the buffer |
+| +20CH | 1 | `00H` = buffer contents not yet modified |
+| +20DH | 1+ | logical number of the currently-buffered sector |
+| +20FH–+30FH | — | FAT copy, drive "Y" |
+| +310H–+410H | — | FAT copy, drive "X" |
+
+**IY-register work area.** During disk routines, `IY` points at a fixed work block
+(location relative to the buffer above, at offset `+411H` from its start) with connected-
+drive bookkeeping distinct from the per-sector buffer:
+
+| Off (from `IY`) | Field |
+|---|---|
+| +00H | start address of media-ID block, drive X |
+| +02H | start address of FAT, drive X |
+| +04H | `00H` |
+| +05H | FAT checksum, drive X |
+| +06H | start address of media-ID block, drive Y |
+| +08H | start address of FAT, drive Y |
+| +0AH | `00H` |
+| +0BH | FAT checksum, drive Y |
+| +0CH | number of connected drives |
+| +0DH | last-used drive (`01H` = X, `02H` = Y) |
+| +0EH | `00H` |
+| +0FH | b2 = port `70H`–`73H`, b1 = port `78H`–`7BH`, b0 = abort on error |
+| +10H | attribute mask for the `SET` command (default `D8H`) |
+| +11H | retry count on read/write error |
+| +12H | jump address for an invalid function code in `C` |
+| +14H | stack pointer to restore on abort-by-error |
+| +16H | port address in use (`70H` or `78H`) |
+| +17H | `00H` |
+
+**Low-level RAM-disk driver work area.** Byte-level driver state (`LOGFORM`/FAT
+addresses, cluster/sector counters, error codes, etc.) at `FC00H`–`FCAFH` is documented in
+`PC-1600-Work-Area-Map.md` §3.18, not repeated here — that file remains the home for all
+F000H–FFFFH addresses.
+
 ## Open items
 
-- Directory-entry byte layout (§3.8.3(4)).
 - `DIRSFT` / `CLSSFT` exact meaning (bit-shift counts for directory-entry-size and
   cluster-size arithmetic — infer from §3.8 or the ROM).
 - `SET DMA` semantics — is it a real DMA address or just a transfer buffer pointer?
+- Directory update-time/date exact bit packing (§5.4) — provisional, scan resolution
+  was too low to fully trust the bit boundaries transcribed.
+- 128 KB (F4H) geometry-table first-data-sector discrepancy (§5.2): Systemhandbuch
+  says `0008H`, ROM dump says `000BH`.
+- Media-ID table pointer at `4242H` (§5.2) vs. the ROM table's own `5006H` base —
+  not yet reconciled.
+- Attribute-byte b1 (`"I"`) meaning (§5.4) — the source itself marks it `?`.

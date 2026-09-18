@@ -13,6 +13,12 @@ pp.203–213** (§6.1 fig = p.204, §6.2 fig(a) = p.205, fig(b) = p.206, §6.3 m
 pp.207–213). The English figures confirm §2 and §3 verbatim; they **correct** the Block A
 sub-addresses in §1 (the German scan was shifted by one slot — see §1).
 
+§3.9 onward is from a second, independent Systemhandbuch source: David von Oheimb, *Das
+Systemhandbuch für den PC-1600*, Appendix 7 "System-RAM (Memory-Map)" (PDF pp. 97–114) —
+its own address-by-address dump of F000H–FFFFH. It fills gaps the English-TRM-sourced §3
+table above leaves blank, and in a few places disagrees with it outright (flagged in
+place, not silently merged/resolved).
+
 **Companion:** the slot / boot / bank-management addresses in this same F000H–FFFFH range
 (F0AEH/F0AFH module bitmaps, F0DCH/F0DDH boot bank, F07DH Port-3D mirror, F123H–F126H
 config, F1ABH reset cause, F015H–F05BH slot descriptors) are in
@@ -187,8 +193,8 @@ as on the PC-1500.
 |---|---|---|
 | F05CH | DSPLPTR | LCD display start line |
 | F05DH | LCDWK1 | LCD work 1 — b0: LCD mode (set to 0); b2: char-generator mode (0=PC-1600, 1=PC-1500); b3: control-char display (0=no, 1=yes); b4: cursor-blink speed (0=slow, 1=fast) |
-| F05EH | LCDWK2 | LCD work 2 — b0: cursor-blink work; b1: LCD interrupt-request mask |
-| F05FH | CRSRY | cursor X coordinate *(sic — the manual labels it "X-Koordinate")* |
+| F05EH | LCDWK2 | LCD work 2 — b0: cursor-blink work; b1: LCD interrupt-request mask *(Systemhandbuch Appendix 7 disagrees: b0 = cursor currently visible, b1 = LCD access flag — not resolved, see §3.13)* |
+| F05FH | CRSRY | cursor X coordinate *(sic — the manual labels it "X-Koordinate")* — but Appendix 7 independently labels F05FH "cursor position **y**" and F060H "cursor position **x**", i.e. the plain, unswapped reading; the two sources disagree on which byte holds which axis, not resolved |
 | F060H | CRSRX | cursor Y coordinate *(sic)* |
 | F061/F062H | CTRCGA | start address (L/H) of the CG table for control characters |
 | F063H | CTRCGB | bank number of the CG table for control characters |
@@ -201,11 +207,15 @@ as on the PC-1500.
 
 | Addr | Name | Contents |
 |---|---|---|
-| F079H | KEYWK1 | key work 1 — b1: click tone (0=off,1=on); b2: repeat (0=off,1=on); b3: which keys repeat (0=non-special, 1=all); b4: repeat delay (0=1 s, 1=0.8 s); b7: key-code conversion (0=on, 1=off) |
-| F07AH | KEYWK2 | key work 2 |
-| F07BH | KEYWK3 | key work 3 |
+| F079H | KEYWK1 | key work 1 — b1: click tone (0=off,1=on); b2: repeat (0=off,1=on); b3: which keys repeat (0=non-special, 1=all); b4: repeat delay (0=1 s, 1=0.8 s); b7: key-code conversion (0=on, 1=off) *(Appendix 7 agrees on b1–b3 but reads b4 as "first repeat" and b7 as "SHIFT/SML off" instead — not resolved, see §3.14)* |
+| F07AH | KEYWK2 | key work 2 — full bit breakdown in §3.14 |
+| F07BH | KEYWK3 | key work 3 — full bit breakdown in §3.14 |
 
 ### 3.4 Plotter / printer command state
+
+*(Appendix 7 gives an independent, partially-conflicting reading of several bytes in
+this range — see §3.13 below; not merged into this table since the conflicts aren't
+resolved.)*
 
 | Addr | Name | Contents |
 |---|---|---|
@@ -303,6 +313,8 @@ lists two overlapping sets:
 This region is clearly reused between the plotter driver's absolute-position tracking and
 its scissoring (clipping) logic; treat the two column sets as mode-dependent aliases and
 verify against the CE-1600P IOCS routines (TRM §3.7) before relying on a specific meaning.
+Appendix 7 gives a third, internally-coherent (non-overloaded) reading for this same
+range under the heading "Plotter 2" — see §3.13 below.
 
 ### 3.8 Misc
 
@@ -310,6 +322,282 @@ verify against the CE-1600P IOCS routines (TRM §3.7) before relying on a specif
 |---|---|---|
 | F9FFH | LOCK | `LOCK`/`UNLOCK` state |
 | FB00H–FB07H | RND NUMBER | 8-byte random-number seed / state |
+
+## 3.9 Timer / interrupt work area (F127H–F12EH)
+
+From the Systemhandbuch's Appendix 7 ("System-RAM", PDF pp. 97–114) — the manual's own
+address-by-address dump of F000H–FFFFH, complementing the named-variable table above
+(sourced from the English TRM's Chapter 6 figures). Ties into the sub-CPU timer IOCS in
+`PC-1600-IO-Ports.md` §7.
+
+| Addr | Contents |
+|---|---|
+| F127H | pending BASIC timer interrupt request — b7: `WAKE$(0)`, b6: `ON TIME$`, b5: `ALARM$` |
+| F12AH | which interrupts are *enabled* — b7: `WAKE$(0)`, b3: `ON TIME$`, b5: `ALARM$`, b1: `Keystat 1` (bit layout as transcribed, some bit positions repeat across the two bytes in the source and may be a transcription slip) |
+| F12BH | signal flags — b3: hour signal, b2: wake-beep, b1: wake, b0: `WAKE$(1)` |
+| F12CH | b0: `ON ADIN` interrupt set |
+| F12DH | `ON ADIN` lower threshold — referenced from `PC-1600-IO-Ports.md` §7 (`SWA1A`) |
+| F12EH | `ON ADIN` upper threshold |
+
+## 3.10 Serial (COM1/COM2) work area (F12FH–F1B1H)
+
+Not previously mapped in this corpus. Cross-reference `PC-1600-Serial-Commands.md` (the
+BASIC-level view) and `PC-1600-Serial-Hardware-Notes.md` (the UART/line hardware).
+
+| Addr | Contents |
+|---|---|
+| F12FH–F131H | `Setcom` parameters, COM1 |
+| F132H–F134H | `Setcom` parameters, COM2 |
+| F135H–F137H | `INIT` string I |
+| F138H–F13AH | `INIT` string II |
+| F13BH / F13CH | `Pconsole` line length, COM1 / COM2 |
+| F13DH / F13EH | `Pzone`, COM1 / COM2 |
+| F140H | receive-buffer start address |
+| F142H | receive-buffer end address |
+| F144H | read pointer |
+| F146H | write pointer |
+| F148H | send status, COM1 |
+| F149H / F14AH | send timeout, COM1 / COM2 |
+| F14BH | receive status, COM1 |
+| F14CH / F14DH | receive timeout, COM1 / COM2 |
+| F14EH | b6: `Setdev` COM2, b2: PO, b0: KI |
+| F14FH | b5: RTS on, b3: `SNDBRK`, b1: DTR on |
+| F150H | receive-error flags — b7: BRK, b2: buffer full, b1: timeout |
+| F151H | b3: word length 7 + SHIFT-IN, b0: XOFF received |
+| F152H | b7: XON sent, b6: SHIFT-OUT received, b3: XOFF sent |
+| F156H | timeout counter, counts up in 0.5-second steps |
+| F158H–F17FH | default receive buffer |
+
+## 3.11 Plotter/Centronics work area, first block (F180H–F195H)
+
+Appendix 7's own reading of this range — presented separately from the named-variable
+table in §3.4 above because the two sources disagree on several bytes (flagged, not
+merged):
+
+| Addr | Contents |
+|---|---|
+| F182H | pitch X |
+| F183H | pitch Y |
+| F184H | b4: `LLINE` type 20d; b3–b0: colour |
+| F185H | `Pconsole` line length |
+| F186H | `Lcursor`/tab |
+| F187H | `Pconsole` EOL code — b7: LF, b6: no CR |
+| F188H | paper position, 0.1 mm units, Y direction |
+| F18AH–F18CH | jump vector for system routines |
+| F18BH | `LLINE` X difference |
+| F18DH | `LLINE` Y difference |
+| F18FH | max. X position |
+| F191H | min. X position |
+| F193H | value read from port 80H |
+| F194H | relative position within the `Pzone` |
+| F195H | scratch for the X position across a pen change |
+
+## 3.12 BASIC interpreter work I (F1B2H–F21CH)
+
+This block was previously an opaque, unlabelled "Interpreter work I" region in §1's Block
+A layout — Appendix 7 gives it real content:
+
+| Addr | Contents |
+|---|---|
+| F1B2H | processing pointer for ROM-module commands |
+| F1B5H | `AUTO` current line |
+| F1B7H | `AUTO` increment |
+| F1BCH | mode — b7: set when port 1FH bit 3 is set (normal case); b6: `Mode 1`; b1: `BREAK OFF`; b0: error-handling routine running |
+| F1BDH | slot where the line search happens |
+| F1BEH | bank of the found peripheral command |
+| F1BFH | "ROM-bit" for the peripheral token table; b7 of F1C0H | PC-1500 token table |
+| F1C1H–F1CEH | **logical banks**: `CURRENT`, `SEARCH START`, `SEARCH FOUND`, `MERGED`, `PREVIOUS I`, `PREVIOUS II`, `BREAK I`, `BREAK II`, `ERROR I`, `ERROR II`, `ON ERROR I`, `ON ERROR II`, `RESTORE`, `INTERPRET` (one byte each, in that order) |
+| F1CFH–F1D4H | BASIC interrupts — `STOP`/`ON` state, request-pending flags |
+| F1D5H | `TITLE` |
+| F1D6H–F1DAH | one info byte per logical bank — b7: program/AEIM module; b5–b4: physical port address (value for port 31H); b1: slot 2; b0: slot 1 — this is `ADTBL+1`…`ADTBL+5`, see §4 below |
+| F1DBH–F21CH | BASIC stack II |
+
+## 3.13 Editor / display extras (F069H–F09CH)
+
+| Addr | Contents |
+|---|---|
+| F069H–F078H | display area currently hidden behind the cursor |
+| F08DH | mirror of port 3CH (`SLOTMAP`) — `PC-1600-IO-Ports.md` §4 |
+| F08EH/F08FH | Line/Pset/Gprint X1 |
+| F090H/F091H | Y1 |
+| F092H/F093H | X2 |
+| F094H/F095H | Y2 |
+| F096H | draw mode ("Set-Code") — `00`=Set, `01`=Or, `02`=Xor |
+| F097H | line dot-pattern code |
+| F099H/F09AH | Gcursor X |
+| F09BH | Gcursor Y |
+| F09DH–F0A1H | jump vector, display routines |
+| F0A2H–F0A6H | jump vector, print routines |
+| F0A7H–F0ABH | jump vector, keyboard routines |
+| F0ACH | Auto-Power-Off counter |
+
+**Appendix 7's alternate reading of the plotter-2 region (F9E0H–F9F9H)**, presented as a
+third, internally-consistent set alongside the two overloaded readings already in §3.7 —
+not merged with them (address offsets between the two sources may differ by a byte or
+two; this needs checking against the CE-1600P IOCS before relying on any single reading):
+
+| Addr | Contents |
+|---|---|
+| F9E0H/F9E1H | pen position X, 0.1 mm units |
+| F9E2H/F9E3H | X overrun count |
+| F9E4H/F9E5H | Y overrun count |
+| F9E6H/F9E7H | paper limit 2 |
+| F9E8H/F9E9H | paper limit 1 |
+| F9EAH/F9EBH | graphics-mode pen position X |
+| F9ECH/F9EDH | graphics-mode pen position Y |
+| F9EEH | pen status — b7: pen down, b5: key-lock, b3: `LLINE` raises the pen, b2: Y overrun, b1: X overrun, b0: lower the pen |
+| F9EFH | status 1 — b7: hardware reset, b6: pen change, b5: battery empty, b3: BREAK key forbidden, b1: paper "R", b0: graph mode |
+| F9F0H | b7–b4: Y follow-counter, b3–b0: X follow-counter |
+| F9F1H | b7–b4: X motor state, b3–b0: Y motor state |
+| F9F2H | value written to port 83H |
+| F9F3H | pen motor — b7–b4: follow-counter, b3–b0: motor state |
+| F9F4H | b7–b4: `ROTATE`, b3–b0: write direction |
+| F9F5H | b3–b0: `CSIZE` |
+| F9F6H | `LLINE` — b7–b4: type, b3–b0: type (as transcribed; likely two sub-fields the source doesn't distinguish clearly) |
+| F9F7H | `Pzone` |
+| F9F8H | status 2 — b6: paper feeds forward unrestricted, b5: no re-centring on paper-feed key, b3: no hardware reset after power-off, b2: value at "Point 35" retained, b1: `LLINE` type 20d, b0: `CSIZE` retained |
+| F9F9H | value read from port 35H |
+
+## 3.14 Keyboard work, full detail (F079H–F08CH, F0DFH–F126H)
+
+Supersedes the brief `KEYWK1`/`KEYWK2`/`KEYWK3` stubs in §3.3 with Appendix 7's full
+breakdown. **Conflicts with §3.3 on F079H bits 4 and 7** (flagged there, not resolved
+here either — kept as two independent readings):
+
+| Addr | Contents |
+|---|---|
+| F079H | status 1 — b7: SHIFT/SML off, b6: fast repeat, b4: first repeat, b3: all keys repeat, b2: repeat on, b1: click on, b0: key-interrupt lock |
+| F07AH | status 2 — b4: `ALARM$` interrupt while waiting for a key, b3: keyboard-buffer access, b2: waiting for a key, b1: key code ≥80H, b0: not the same key (as last time) |
+| F07BH | status 3 — b3: `Keystat 2`, b2: Power-Off off, b1: Power-Auto-Off 1, b0: `Keystat 1` |
+| F07CH | keys from Keystat 1/2 — b7: PF-U, b6: PF-0, b0: OFF |
+| F07DH | mirror of port 3DH — `PC-1600-IO-Ports.md` §4 |
+| F07EH | mask for the timer interrupt |
+| F07FH | keyboard-buffer write pointer (00H–3FH); b7 = buffer full |
+| F080H | keyboard-buffer read pointer |
+| F081H | last key pressed |
+| F082H | repeat counter |
+| F083H | last key including shift function (for repeat) |
+| F084H/F085H | SHIFT key-code table start address; F086H = bank |
+| F087H/F088H | KBII table start address; F089H = bank |
+| F08AH/F08BH | SHIFT-KBII table start address; F08CH = bank |
+| F0DFH–F11EH | keyboard buffer |
+| F11FH/F120H | bank / address of the normal-key key-code table |
+
+## 3.15 LH-5803 register-save area (F001H–F012H)
+
+The sub-CPU's register-save block, used across `CALLH` and interrupt handoffs between the
+two CPUs (`PC-1600-CPU-LH5803-Compat.md`):
+
+| Addr | Register |
+|---|---|
+| F002H | Mode — b4: parameter handoff |
+| F004H | Flags — b4: H, b3: V, b2: Z, b1: IE, b0: C |
+| F005H | A (error code) |
+| F006H/F007H | X (HL) |
+| F008H/F009H | Y (DE) |
+| F00AH/F00BH | U (BC) |
+| F00CH | PC |
+| F00EH | b0: PV |
+| F00FH | IX (uncertain — source marks this "?") |
+| F011H | IY (uncertain — source marks this "?") |
+
+## 3.16 Arithmetic-register names (FA00H–FA37H)
+
+The English-TRM figure only labels this range "Arithmetic-operations area" (§1.1);
+Appendix 7 names the individual registers, matching the `XX` register referenced by
+`PC-1600-ROM-Jump-Table.md` (e.g. `USGCNT`, `USCNVL`):
+
+| Addr | Name |
+|---|---|
+| FA00H | XX |
+| FA08H | ZZ |
+| FA10H | YY |
+| FA18H | UU |
+| FA20H | VV |
+| FA28H | WW |
+| FA30H | SS |
+| FA38H–FAFFH | BASIC stack |
+
+## 3.17 Cassette-interface header buffer (FB60H–FBAFH)
+
+| Addr | Contents |
+|---|---|
+| FB60H–FB8FH | header buffer |
+| FB90H/FB91H | start address |
+| FB92H | bank |
+| FB93H/FB94H | end address |
+| FB95H | bank |
+| FB96H/FB97H | pointer into the address/length block |
+| FB98H–FBAFH | address/length block (value for port 31H, b7 = last block: start address, length) |
+
+Relevant to the serial/cassette binary formats in `../Data-Formats/Binary-Exchange-Formats.md`
+and `../Data-Formats/WAV-Cassette-Format-1500-1600.md`.
+
+## 3.18 RAM-disk work area (FC00H–FCAFH)
+
+Detailed low-level RAM-disk driver state, complementing the FCB/directory structures in
+`PC-1600-Filesystem.md`. Not merged there — this file remains the home for all
+F000H–FFFFH addresses; Filesystem.md cross-references this section.
+
+| Addr | Contents |
+|---|---|
+| FC00H–FC07H | RAM-disk S1 — `LOGFORM` address, FAT address, FAT checksum, Media ID, count of open files |
+| FC08H–FC0FH | RAM-disk S2 — same layout |
+| FC10H | byte count of the old sector |
+| FC12H | count of the new sectors |
+| FC14H | byte count of the new sector |
+| FC16H | device name — `01`=X, `02`=Y, `00`=S1, `01`=S2, `04`=COM, `05`=COM1, `06`=COM2 (also the `SEARCH BOOT` result slot, `PC-1600-Filesystem.md` §6) |
+| FC17H–FC21H | filename + extension |
+| FC22H | cluster counter while searching |
+| FC23H | first free cluster |
+| FC24H | disk-buffer-control address; RAM: dir-block address |
+| FC27H | dir-block number |
+| FC28H | logical block count per read/write operation |
+| FC2AH–FC2DH | logical sector number (low/high), byte number (low/high) |
+| FC30H–FC34H | physical sector count, remainder bytes |
+| FC36H | current cluster number |
+| FC38H | remaining sectors |
+| FC39H | current read/write address |
+| FC3BH | RAM-disk error code |
+| FC3CH | count of clusters processed so far |
+| FC3EH | FCB address |
+| FC40H | X/Y control address |
+| FC42H | `LOGFORM` address |
+| FC44H | read/write-FCB address |
+| FC4BH | `00`=read, `01`=write, `02`=compare |
+| FC4EH | current sector count of the file |
+| FC50H | b7: new sector needed |
+| FC51H | disk full |
+| FC52H | sector complete |
+| FC56H | value in port 31H |
+| FC57H | FAT write counter |
+| FC58H | device name for the file search |
+| FC5AH | current dir-block during the file search |
+| FC9AH–FCA4H | new name |
+| FCA5H–FCAFH | old name |
+
+## 3.19a BASIC interpreter work II (F31DH–F3C6H)
+
+The counterpart to §3.12 for the second "Interpreter work II" block in §1's layout:
+
+| Addr | Contents |
+|---|---|
+| F31DH–F35EH | stacks for BASIC interrupts |
+| F32DH–F334H | max. 8 active interrupts |
+| F335H | stack pointer for interrupt masks |
+| F337H–F35EH | 5 bytes per active interrupt |
+| F35FH | command token |
+| F3BFH | last "ROM-bit" (for reset) |
+| F3C1H–F3C3H | COM-command entry point |
+| F3C6H | status 2 — b7: KBII, b3: `S`, b1: CTRL, b0: BATT |
+
+## 3.19 WAKE$ storage (FF00H–FF3FH)
+
+| Addr | Contents |
+|---|---|
+| FF00H–FF1FH | `WAKE$(0)` |
+| FF20H–FF3FH | `WAKE$(1)` |
+| FF40H–FFFFH | unused |
 
 ## 4. BASIC-program bank distribution — `ADTBL` / `SxMTb` (TRM §3.12.2)
 
@@ -361,4 +649,15 @@ The full, implementation-ready procedure — build the ordered S0 segment list f
 - CG-table pointers (CTRCGA/CTRCGB, UPACGA/UPACGB) tie into the "changing the display
   character font" feature (TRM §5.2) — cross-reference when §5 is processed.
 - Whether the `CRSRY = X` / `CRSRX = Y` labelling in §3.2 is a manual typo or a genuine
-  axis-naming quirk — check against the LCD IOCS routines (§3.1).
+  axis-naming quirk — check against the LCD IOCS routines (§3.1). Appendix 7 (§3.13
+  note under §3.2) gives yet another reading, still unresolved.
+- Real-hardware conflicts between the English-TRM-sourced §3 table and the
+  Systemhandbuch-Appendix-7 material in §3.9–§3.19a: `F05EH` (LCD access/cursor-visible
+  bits), `F05FH`/`F060H` (X/Y axis swap), `F079H` bits 4/7 (keyboard status), and the
+  whole F180H–F195H / F9E0H–F9F9H plotter ranges (three different, only-partially-
+  reconcilable readings across the two sources plus the aliasing already noted in §3.7).
+  None of these are resolved — treat both readings as provisional until checked against
+  real hardware or a ROM disassembly.
+- Appendix 7's own note that "on some ROM versions, 4 more jumps follow" past the fixed
+  jump table (see `PC-1600-ROM-Jump-Table.md`) — not itemised by the source, not yet
+  investigated.
