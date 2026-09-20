@@ -38,7 +38,7 @@ The **TC40H138F** further decodes AD11–AD13 within Y1 (4000H–7FFFH) into eig
 | S6, 7000H–75FFH | — | Inhibited | Inhibited |
 | S6/V2, 7600H–76FFH | — | Display-driver RAM (LCD chips 1 & 3) | Display-driver RAM (LCD chips 1 & 3) |
 | S6/V3, 7700H–77FFH | — | Display-driver RAM (LCD chips 2 & 4) | Display-driver RAM (LCD chips 2 & 4) |
-| S7 | 7800H–7FFFH | System memory (partially populated, see §2.3) | Standard user and system memory, including the machine-language area (&7C01–&7FFF, see §4) |
+| S7 | 7800H–7FFFH | 7800H–7BFFH standard user and system memory; 7C00H–7FFFH inhibited (mirror of 7800H–7BFFH, see §2.3) | Standard user and system memory, including the machine-language area (&7C01–&7FFF, see §4) |
 
 A second-stage TC40H139F, gated by S6, splits it into 2Y2 (V2, display chips 1 & 3) and 2Y3 (V3, display chips 2 & 4).
 
@@ -56,7 +56,7 @@ Confirmed by direct teardown of both a PC-1500 unit and a PC-1500A unit, and —
 | TC5514 (×2, 1K×4bit each) | 1024B | S7, &7800–&7FFF (see note below) | System memory + part of fixed variables |
 | SC882G display chips (×4) | 512B | S6/V2+V3, &7600–&77FF | Rest of fixed variables + display buffer |
 
-**S7 is chip-selected across its full 2KB, but only holds 1KB of distinct storage.** The TC5514 pair has 10 address lines (A0–A9); S7 is a 2KB block, needing 11 (A0–A10) to address every byte uniquely. The chip-select schematic shows the pair fed by a single, ungated wire straight off Y7 — no logic conditions the select on A10. Since the chips have no A10 pin at all, they simply can't distinguish it: they respond to *any* access anywhere in the 2KB S7 window, decoding only A0–A9. The practical result is that **&7800–&7BFF and &7C00–&7FFF are not independent — they're the same 1024 physical bytes, mirrored**, at a fixed offset of &400 (a write to any address *n* in &7C00–&7FFF lands on the same cell as address *n*−&400 in &7800–&7BFF). This is why the PC-1500's own TRM decode table marks the entire S7 block "inhibited" rather than exposing any of it as user-accessible memory (see the PC-1500 Chip-Select Table appendix): it's not merely unpopulated, a write anywhere in the upper half would silently corrupt whatever system data occupies the corresponding byte in the lower half. A separate Sharp Service Manual independently confirms this with its own memory-map diagram, marking &7C00–&7FFF with the caption **"Inhibit to use by redundancy"** — Sharp's own term for the same mechanism, from a source unrelated to the TRM table.
+**S7 is chip-selected across its full 2KB, but only holds 1KB of distinct storage.** The TC5514 pair has 10 address lines (A0–A9); S7 is a 2KB block, needing 11 (A0–A10) to address every byte uniquely. The chip-select schematic shows the pair fed by a single, ungated wire straight off Y7 — no logic conditions the select on A10. Since the chips have no A10 pin at all, they simply can't distinguish it: they respond to *any* access anywhere in the 2KB S7 window, decoding only A0–A9. The practical result is that **&7800–&7BFF and &7C00–&7FFF are not independent — they're the same 1024 physical bytes, mirrored**, at a fixed offset of &400 (a write to any address *n* in &7C00–&7FFF lands on the same cell as address *n*−&400 in &7800–&7BFF). This is why the PC-1500's own TRM decode table marks the upper half of S7 (&7C00–&7FFF) "inhibited" while listing &7600–&7BFF as standard user and system memory (see the PC-1500 Chip-Select Table appendix): it's not merely unpopulated, a write anywhere in the upper half would silently corrupt whatever system data occupies the corresponding byte in the lower half. A separate Sharp Service Manual independently confirms this with its own memory-map diagram, marking &7C00–&7FFF with the caption **"Inhibit to use by redundancy"** — Sharp's own term for the same mechanism, from a source unrelated to the TRM table.
 
 **PC-1500A** (8.5KB total physical RAM):
 
@@ -330,7 +330,7 @@ Same TRM figure format as the PC-1500A table above, this one for the plain PC-15
 <td>OPTIONAL USER MEMORY</td>
 </tr>
 <tr>
-<td rowspan="10">Y1 (<span style="text-decoration:overline">1Y1</span>)</td>
+<td rowspan="11">Y1 (<span style="text-decoration:overline">1Y1</span>)</td>
 <td>S0 (<span style="text-decoration:overline">Y0</span>)</td><td></td>
 <td>4000H–<br>47FFH</td>
 <td>STANDARD USER MEMORY</td>
@@ -365,15 +365,19 @@ Same TRM figure format as the PC-1500A table above, this one for the plain PC-15
 <tr>
 <td>V2 (<span style="text-decoration:overline">2Y2</span>)</td>
 <td>7600H–<br>76FFH</td>
-<td rowspan="2">STANDARD USER AND SYSTEM MEMORY</td>
+<td rowspan="3">STANDARD USER AND SYSTEM MEMORY (1.5K)<br><small>(spans 7600H–7BFFH: V2, V3, and the lower half of S7)</small></td>
 </tr>
 <tr>
 <td>V3 (<span style="text-decoration:overline">2Y3</span>)</td>
 <td>7700H–<br>77FFH</td>
 </tr>
 <tr>
-<td>S7 (<span style="text-decoration:overline">Y7</span>)</td><td></td>
-<td>7800H–<br>7FFFH</td>
+<td rowspan="2">S7 (<span style="text-decoration:overline">Y7</span>)</td><td></td>
+<td>7800H–<br>7BFFH</td>
+</tr>
+<tr>
+<td></td>
+<td>7C00H–<br>7FFFH</td>
 <td>INHIBITED</td>
 </tr>
 <tr>
@@ -393,7 +397,7 @@ Same TRM figure format as the PC-1500A table above, this one for the plain PC-15
 
 *Footnote in the source: "S0–S7, V2, and V3 are applicable only for the ME0 area." Two typos in Sharp's original table are corrected here rather than reproduced: the Y2 row's end address is printed as `8FFFH` (implying a 4KB block, inconsistent with the fixed 16KB Y-block architecture established throughout this document) and is given here as `8000H–BFFFH`; V3's decoder pin is printed as `2Y2` (duplicating V2's) and is given here as `2Y3`, per the same reasoning and schematic evidence as the PC-1500A table above. Both are confirmed typos in the source document itself, not scan-reading errors — kept corrected rather than reproduced faithfully.*
 
-**The key structural difference from the PC-1500A table**: S7 (&7800–&7FFF) is marked **INHIBITED** here, not "standard user and system memory" — there is no machine-language-area annotation on the PC-1500 at all. §2.3 explains why in hardware terms: the TC5514 pair's missing 11th address line means the block's two halves mirror each other, so exposing either half as independent user memory would let a write silently corrupt whatever system data occupies the same aliased cell. "Inhibited" here means "unsafe for general use," not "physically unpopulated."
+**The key structural difference from the PC-1500A table**: only the *upper half* of S7 (&7C00–&7FFF) is marked **INHIBITED** here; &7600–&7BFF (V2, V3, and the lower half of S7) is a single 1.5K "standard user and system memory" region, per the TRM memory-map table on p.93. There is no machine-language-area annotation on the PC-1500 at all. §2.3 explains the inhibited half in hardware terms: the TC5514 pair's missing 11th address line means &7C00–&7FFF mirrors &7800–&7BFF, so exposing the upper half as independent user memory would let a write silently corrupt whatever system data occupies the same aliased cell. "Inhibited" here means "unsafe for general use," not "physically unpopulated."
 
 **Independently confirmed by a second Sharp source.** A Sharp Service Manual for the PC-1500 (a different document from the TRM table reproduced above) includes its own memory-map diagram, which marks &7C00–&7FFF with diagonal hatching and the caption **"Inhibit to use by redundancy"** — Sharp's own term for exactly the address-line-aliasing mechanism derived independently in §2.3. The same hatching and caption also cover &7000–&75FF (see below) — Sharp uses one label for both mirrored regions.
 
