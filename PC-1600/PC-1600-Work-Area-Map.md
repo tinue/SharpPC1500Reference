@@ -658,6 +658,8 @@ The full, implementation-ready procedure — build the ordered S0 segment list f
   reconcilable readings across the two sources plus the aliasing already noted in §3.7).
   None of these are resolved — treat both readings as provisional until checked against
   real hardware or a ROM disassembly.
-- Appendix 7's own note that "on some ROM versions, 4 more jumps follow" past the fixed
+- ~~Appendix 7's own note that "on some ROM versions, 4 more jumps follow" past the fixed
   jump table (see `PC-1600-ROM-Jump-Table.md`) — not itemised by the source, not yet
-  investigated.
+  investigated.~~ **Resolved:** itemised from the ROM dump in
+  `PC-1600-ROM-Versions.md` §4; "some ROM versions" is the OLD/NEW BASIC ROM split that
+  document describes.

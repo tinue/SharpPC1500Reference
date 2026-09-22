@@ -46,6 +46,7 @@ primary sources.
 | [`PC-1600-Peripherals-Hardware.md`](PC-1600-Peripherals-Hardware.md) | **in progress** | Printer/plotter (CE-1600P) and floppy (CE-1600F) IOCS + peripheral hardware (TRM §3.7/§3.8/Ch 8). §3.7 printer + §3.8 floppy routine sets filled; Ch 8 pending. |
 | [`PC-1600-Keyboard.md`](PC-1600-Keyboard.md) | **complete (hw)** | Scan mechanism (1/64 s via sub-CPU → INT4), strobe/sense wiring (TRM §7.4/§7.9); **plus the full §3.2 key IOCS routines**, the 9-strobe software scan matrix, the §3.2.2 work area (KEYWK1–3, buffer pointers, 64-byte buffer F0DF–F11E), the 4 translation-table pointers + redefinition, and the ON/BREAK path (I/O 1BH b1). Emulator-ready. Key-code value table (§10.2) — agent-facing, not emulator-critical — pending. |
 | [`PC-1600-Serial-Hardware-Notes.md`](PC-1600-Serial-Hardware-Notes.md) | **first pass** | RS-232C/SIO share one TC8576F; PRIM select; BX7269W level shifter; VDD/VEE; TC8576F pinout (TRM §7.6). Plus the FTDI USB/UART wiring how-to. |
+| [`PC-1600-ROM-Versions.md`](PC-1600-ROM-Versions.md) | **complete** | The two BASIC ROM revisions (OLD / NEW) and Sharp's three-`PEEK #` identification table, mapped onto the CS001 / CS123 / CS24 chips; confirmed NEW against the real-hardware dumps and PockEmul (byte-identical); resolves the jump table's "on some ROM versions, 4 more jumps follow" caveat by enumerating those entries. SOFTWARE-INFO bulletin 1600-010E. |
 
 ### Stubs — structure in place, content to be written
 
@@ -94,6 +95,11 @@ per-section:
   machine-language commands and PC-1500 compatibility (App. E/H).
 - **Module service manuals** — CE-1601M; and the third-party *superRAM* manual for the
   vertical-bank mechanism.
+- **SHARP SOFTWARE-INFO bulletins** (Sharp Electronics Europe, Software Center Hamburg,
+  1987–88) — dealer/agent errata and tips sheets: Nos. 1600-010E, -011, -012, -014G,
+  -015G. Primary Sharp material, but *advisory* rather than reference-grade: they document
+  firmware bugs, workarounds and the BASIC ROM revision split (`PC-1600-ROM-Versions.md`).
+  Local scan: `~/SynologyDrive/Dokumente/PDF/Vintage/Sharp/PC-1600/Sharp-Soft-Info.pdf`.
 
 ### Independent validation
 

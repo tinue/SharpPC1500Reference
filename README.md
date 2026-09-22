@@ -80,6 +80,7 @@ Machine-specific consolidation for the **Sharp PC-1600** (dual-CPU: Z-80-compati
 | `PC-1600-Expansion-Bus.md` | *(stub)* Designing hardware for the 60-pin system bus + 40-pin memory slots: electrical, bus-cycle timing, IRQ/WAIT protocol, ROM-module header/autostart, worked example. |
 | `PC-1600-Memory-Modules.md` | *(stub)* Per-module catalogue: CE-1600M/1601M/1620M/1650M/superRAM + PC-1500-module adaptation. |
 | `PC-1600-Assembly-Guide.md` | *(stub)* Writing SC7852 machine-language programs: BASIC calling conventions, bank-aware code, ROM entry points, toolchain. |
+| `PC-1600-ROM-Versions.md` | The two PC-1600 BASIC ROM revisions (OLD/NEW), Sharp's three-`PEEK #` identification table mapped onto the CS001/CS123/CS24 chips, verification against the real-hardware dumps (all NEW, byte-identical to PockEmul's set), and the now-enumerated four extra reset-only jump-table entries. From SOFTWARE-INFO bulletin 1600-010E. |
 | `PC-1600-ROM-Disassembly.md` | Pointer to the external PC-1600 ROM reverse-engineering project |
 
 ### Memory-Architecture/
