@@ -310,24 +310,33 @@ directory area is located by the boot sector's directory-area pointer, §5.2 —
 | b2 | hidden from the `FILES` command's listing |
 | b5 | always set (part of the `20H` default) |
 
-**Update time+date (`+16H`–`+19H`).** The source's own bit-position header (`b7 b6 b5
-b4 b3 b2 b1 b0`) is given once and covers all four bytes; the scan is low-resolution
-enough here that the exact bit boundaries are **not fully reliable** — transcribed as
-literally as legible, re-check against the original before relying on it:
+**Update time+date (`+16H`–`+19H`).** The Systemhandbuch gives each byte
+left-to-right from b7 to b0, with `/` separating the high-bit field from the low-bit
+field:
 
-- `+16H`: minute, low bits (b2–b0), rest `0`
-- `+17H`: hour (b4–b0) in the low bits, with minute's higher bits apparently continuing
-  into the top bits (b7–b5) of this same byte
-- `+18H`: month, low bits (b2–b0), with day occupying the higher bits (b4–b0 overlap as
-  read — likely day in b7–b3)
-- `+19H`: mostly `0`, with one more bit of month (b3) in bit 0
+| Byte | Source text | b7…b0 |
+|---|---|---|
+| `+16H` | Minute (b2–b0) / 0 0 0 0 0 | minute b2–b0 in b7–b5; b4–b0 = `0` |
+| `+17H` | Stunde (b4–b0) / Minute (b5–b3) | hour b4–b0 in b7–b3; minute b5–b3 in b2–b0 |
+| `+18H` | Monat (b2–b0) / Tag (b4–b0) | month b2–b0 in b7–b5; day in b4–b0 |
+| `+19H` | 0 0 0 0 0 0 0 Monat (b3) | b7–b1 = `0`; month b3 in b0 |
 
-This reads as a minute/hour/day/month bitfield split unusually across the byte pair
-boundaries rather than the classic single-word FAT packing — plausible given the PC-1600
-has no cluster-year field here at all (contrast the FCB/directory's separate FAT-style
-`FTIM`/`FDAT` words elsewhere, which — per §2 above — pack `[hour][minute][second/2]` and
-`[year][month][day]` in the conventional MS-DOS-FAT layout). Treat this specific 4-byte
-breakdown as provisional.
+Read as two little-endian 16-bit words, this is exactly the conventional MS-DOS FAT
+packing — the same as the FCB's `FTIM`/`FDAT` (§2) — with the fields the PC-1600 clock
+doesn't have left at zero:
+
+- **time** (`+16H/+17H`) = `hour << 11 | minute << 5 | 0` (seconds/2 field = `0`)
+- **date** (`+18H/+19H`) = `0 << 9 | month << 5 | day` (year field = `0`; `TIME` has no year)
+
+Example: 22 September, 14:37 → `A0 74 36 01`.
+
+The scan prints the extension offset as `+0B-0A` (a typo for `08H–0AH`) and gives the
+file size as two words, `+1CH` = size mod 65536 and `+1EH` = size \ 65536 — i.e. the
+single 32-bit little-endian value in the table above.
+
+(An earlier transcription of this section, made from a low-resolution scan, misplaced
+the minute bits into the low bits of `+16H` and concluded the packing was non-standard;
+the clean text above supersedes it.)
 
 ### 5.5 Patching the header past INIT's 256 KB ceiling
 
@@ -436,8 +445,6 @@ F000H–FFFFH addresses.
 - `DIRSFT` / `CLSSFT` exact meaning (bit-shift counts for directory-entry-size and
   cluster-size arithmetic — infer from §3.8 or the ROM).
 - `SET DMA` semantics — is it a real DMA address or just a transfer buffer pointer?
-- Directory update-time/date exact bit packing (§5.4) — provisional, scan resolution
-  was too low to fully trust the bit boundaries transcribed.
 - 128 KB (F4H) geometry-table first-data-sector discrepancy (§5.2): Systemhandbuch
   says `0008H`, ROM dump says `000BH`.
 - Media-ID table pointer at `4242H` (§5.2) vs. the ROM table's own `5006H` base —
