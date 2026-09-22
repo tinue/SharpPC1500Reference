@@ -422,7 +422,7 @@ intermediate buffer for a full disk side.
 |---|---|
 | 0 | Boot sector (`PC-1600-Filesystem.md` §5.1) |
 | 1 | FAT |
-| 2 | FAT (backup) |
+| 2 | FAT (backup) — the ROM keeps it identical to sector 1 (observed on emulator disks) |
 | 3–5 | Directory (3 sectors × 512 B ÷ 32 B = 48 entries) |
 | 6–127 | Data (122 clusters) |
 

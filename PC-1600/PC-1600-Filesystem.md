@@ -330,6 +330,18 @@ doesn't have left at zero:
 
 Example: 22 September, 14:37 → `A0 74 36 01`.
 
+**What the ROM actually writes differs in two fields** (observed 2026-09-22 on directory
+entries the CE-1600P ROM wrote in Calc-U-1600 after `TIME=092213.4556`, and on an older
+emulator disk, `dw.img`):
+
+- the **seconds/2 field is filled** from the clock (e.g. 13:46:08 → time word `6DC4`);
+- the **year field is always 6**, whatever the date (09-22 → date word `0D36`, 01-01 →
+  `0C21`). If read as MS-DOS years since 1980, that is 1986.
+
+Attribute `20H`, the reserved bytes `0CH`–`15H` = `00H`, and `1BH` = `00H` were confirmed
+on files of every type (`SAVE`, `SAVE …,A`, `PRINT#`, `BSAVE`). After `KILL`, the next
+`SAVE` reuses the freed (`E5H`) directory slot and the lowest free cluster.
+
 The scan prints the extension offset as `+0B-0A` (a typo for `08H–0AH`) and gives the
 file size as two words, `+1CH` = size mod 65536 and `+1EH` = size \ 65536 — i.e. the
 single 32-bit little-endian value in the table above.
