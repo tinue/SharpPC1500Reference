@@ -197,6 +197,15 @@ LH-5810-style `IF` register — `PC-1600-IO-Ports.md` §2.2, `IF1`, set on the r
 of `PB7`): b1 = 1 ⇒ pressed, latched. Clear it with `BREAKRESET` (018AH), which also
 clears the keyboard buffer. `BREAKCHK` (016FH) reads it via IOCS.
 
+The **live level** (not latched) can be read in two places: **1FH bit 7** (PB7) and
+**1AH bit 5**, the MSK read's PB7 slot. Both are 1 while ON is held. Source: Baum,
+*PC-1600 Systemhandbuch* (ISBN 3-924327-31-9) p.92 (`INP &1A AND &20` or
+`INP &1F AND &80`) and Anhang A pp.93–94. The ROM polls it directly, e.g. a
+wait-for-release loop `IN A,(1FH) / RLA / JR C,…` at P0-B0 `0775H`, and the key scan
+at P2-B6 `9412H` shifts `/PB7` in as an extra key bit. An emulator that models only
+the IF latch misbehaves when ON is *held*. Seen in Calc-U-1600: the next typed command
+was swallowed.
+
 ## TODO
 
 - Key-*code* table values (§10.2): matrix position → character/token, plus the SHIFT /

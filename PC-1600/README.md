@@ -89,6 +89,10 @@ per-section:
   (Holtkötter, German) — the same manual; the German scan is cleaner and is what most of
   the transcription was read from. Covers the memory map, IOCS, the BASIC interpreter,
   the work area, the hardware chapter, and the Z-80 mnemonic tables.
+- **Winfried Baum, *PC-1600 Systemhandbuch*** (ISBN 3-924327-31-9, German) — a separate,
+  third-party book despite the shared title; cited as "Baum". Its Anhang A (I/O port list,
+  pp.93–97) is the source for the ON-key live level, the 17H cassette sync tone and the
+  18H b7/b6 meaning.
 - **PC-1600 Service Manual** — hardware architecture, schematics, the LR38041 gate array,
   slot pinouts. (The bank-switching document is largely Service-Manual-sourced.)
 - **PC-1600 Bedienungsanleitung** (German user manual) — memory map (App. D),

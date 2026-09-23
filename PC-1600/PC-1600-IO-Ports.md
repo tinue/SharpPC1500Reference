@@ -56,7 +56,7 @@ numbers across the PC-1500 line). It also adds two registers TRM §7.9 doesn't n
 | — | 14H write | divider reset (`Teiler-Reset`) |
 | — | 15H read | `U` register — serial receive |
 | — | 16H write | `L` register — serial transmit |
-| — | 17H write | `F` register — serial-output modulation |
+| — | 17H read/write | `F` register — serial-output modulation. Also a continuous tone on the buzzer: `OUT &17,65` on, `OUT &17,0` off (§2.7) |
 | OPC | 18H | PC-port output buffer |
 | — | 19H | `G` register — wait control / baud rate |
 | MSK | 1AH | interrupt mask (LH-5810-style path) |
@@ -90,6 +90,11 @@ this doc, from the TRM alone, had the less-specific pin names `CL1`/`SD1`):
 (CL1)  (SD1)
 ```
 
+So **bit 5 of a 1AH read is the ON key's live level** (PB7, 1 = pressed), readable any
+time without the IF latch. Baum, *PC-1600 Systemhandbuch* (ISBN 3-924327-31-9) p.92: *"Sowohl Bit 5 der E/A Adresse &1A als auch
+Bit 7 in &1F (PB7) werden bei gedrückter ON-Taste gesetzt"* — `INP &1A AND &20` or
+`INP &1F AND &80`.
+
 ### 2.2 IF register — 1BH
 
 A flip-flop per bit, retained until explicitly cleared — same bit assignment as the MSK
@@ -113,7 +118,7 @@ PB5 (b5), PB6 (b6), PB7 (b7) — treat b0/b1/b3/b4 as don't-care.)
 
 | Bit | Signal |
 |---|---|
-| b7 | BREAK key |
+| b7 | BREAK key — the ON key's **live level**, 1 = pressed. The same bit reads as MSK (1AH) bit 5. See Keyboard §8 |
 | b6 | keyboard strobe #8 |
 | b5 | 1/64-second pulse |
 | b2 | cassette-receive input |
@@ -139,13 +144,15 @@ Buffer for data sent to the PC port. The data bus can also be latched into OPC o
 (Pin-level gate logic: `PC6 = NAND(PB2, PC6', PC7', SD0)`, `SD0 = OR(SD0', PC7')` —
 `PC-1600-CPU-SC7852-Z80.md` §6, pins 75/76.)
 
-**Discrepancy, not resolved.** Appendix 6's own one-line gloss for register 18H reads
-"b7: buzzer line (active = 0), b6: buzzer on" — i.e. it describes *both* bits as
-buzzer-related, disagreeing with the pin-level table above (b7 = cassette write, b6 =
-buzzer) which is corroborated by the gate-logic equations in `PC-1600-CPU-SC7852-Z80.md`
-§6. The gate-logic-corroborated reading is kept as authoritative; the Appendix 6 gloss is
-flagged here in case it turns out to reflect a real polarity/aliasing detail this doc is
-missing.
+**Resolved: both readings are right.** Appendix 6 glosses 18H as "b7: buzzer line
+(active = 0), b6: buzzer on". That looked like it contradicted the pin-level table above
+(b7 = cassette write). Baum, *PC-1600 Systemhandbuch* (ISBN 3-924327-31-9), Anhang A p.93, settles it:
+"&18 Port PC — Bit 6: 0 = BEEP OFF, 1 = BEEP ON; Bit 7: **Cassettenausgang und
+Lautsprecher** (cassette output *and* loudspeaker), 0 = low, 1 = high". b7 is the SD0
+cassette-write line, and that same line sounds the buzzer. That's the gate
+`PC6 = NAND(…, SD0)`. b6 is the BEEP ON/OFF gate. The BEEP tone loop matches (P1-B3
+`5EB9H`): it toggles b7 with b6 = 1. `BEEP OFF` clears b6 and silences everything on
+this line.
 
 ### 2.6 Relationship to the 32H/35H interrupt system
 
@@ -154,6 +161,42 @@ The MSK/IF pair here latches **IRQ**, **PB7** and the **TD** serial flag. The se
 aggregate the machine-wide interrupt causes. Both ultimately feed the Z-80 INT line; the
 TRM does not spell out how the two layers combine. Needs TRM §3.4 (interrupt work area)
 to reconcile — flagged open.
+
+### 2.7 F register — 17H: the modulated output as a tone generator
+
+The F register works as in the PC-1500's LH5810/5811 (PC-1500 TRM 3-2 D and 3-3-2 (9), pp.69/72):
+
+| Bits | Meaning |
+|---|---|
+| F6 | SDO output mode: 0 = normal serial data, 1 = **modulated** |
+| F3–F5 | FY: modulation clock for data 0 — φ ÷ 64 / 128 / 256 / 512 / 1024 (codes 0–4) |
+| F0–F2 | FX: modulation clock for data 1 — same code table |
+
+In modulated mode `SDO = SXO·FX + /SXO·FY`. With nothing being transmitted, SXO idles at
+mark (1), so **SDO is a continuous FX square wave**.
+
+Baum, *PC-1600 Systemhandbuch* (ISBN 3-924327-31-9), Anhang A p.93, lists port &17 as a *"Dauerton, Synchronisationssignal für
+Cassettenaufnahmen. Einschalten: OUT &17,65 — Ausschalten: OUT &17,0"*: the cassette
+leader tone. 65 = 41H: F6 = 1, FX = φ÷128, FY = φ÷64.
+
+**φ = 1.3 MHz ÷ 4 = 325 kHz, measured (2026-09-23).** The dampflok program (Baum p.52)
+whistles with exactly these writes. A real unit plays **2539 Hz**: 2533.24 Hz recorded,
+less the recorder's −0.22 % established by the BEEP measurements
+(`PC-1600-CPU-SC7852-Z80.md` §2.3). That is 1.3 MHz ÷ 512, i.e. FX = ÷128 of 325 kHz.
+- Baum prints "2639 Hz". That is a typo: no power-of-two division of 1.3 MHz or 3.58 MHz
+  gives 2639 Hz (1.3 MHz ÷ 492.6).
+- The PC-1500 differs. Its LH5811 runs the dividers from 1.3 MHz directly: the CE-150
+  tape code writes F = 63H (FX ÷512 = 2539 Hz, FY ÷1024 = 1270 Hz), the documented
+  2500 / 1250 Hz tape tones (`../Data-Formats/PC-1500-Tape-Format.md`).
+
+**Buzzer path.** SDO is an input to the same buzzer gate as OPC b7/b6, not a replacement
+for b7. In the recording the whistle continues unchanged while a noise routine writes
+random 00H/FFH to 18H, and both are heard. Treating all inputs as idle-high:
+**buzzer drive = (OPC b6 ∧ OPC b7) ∧ SDO**. So `BEEP OFF` (b6 = 0) silences the tone as
+well, consistent with `PC6 = NAND(…, SD0)` (§2.5).
+
+The PC-1600's own ROM writes 17H only with 01H (normal mode), in the CE-1600P cassette
+read code (P1-B5 `62BDH`).
 
 ## 3. TC8576F UART register select, 20H–27H (TRM §7.6)
 
@@ -233,6 +276,8 @@ b6 inverted — §2.5) and **F** (LU-57813P). It sounds when either is asserted.
   ON signal (PC7), and the CE-150/CE-162 record signal (SD0'). `BEEP OFF` holds PC6 high
   (silent). Silent state = PC6 high.
 - **F** path combines: click-ON, wakeup-ON, alarm-ON. Silent state = F low.
+- The modulated serial output **SDO** of the 10H–1FH block (F register, §2.7) also drives
+  the PC6 path. That's how the cassette sync tone (`OUT &17,65`) is heard.
 
 ### 6.1 BEEP IOCS routines (TRM §3.10)
 
@@ -375,7 +420,10 @@ for §6.1 never slips, so **it answers the probe**.
   interrupt layers (port 35H bit 6 ↔ §7.1 sub-CPU bitfield). **Bit 4 resolved
   (2026-08-30, Systemhandbuch §7.3/§7.4):** a plain free-running 64 Hz, 50%-duty square
   wave from the sub-CPU's Z6 pin (INT4/PB5), not edge-latched — see
-  `PC-1600-CPU-SC7852-Z80.md` §5.2. Bits 0-3/5-7 still open.
+  `PC-1600-CPU-SC7852-Z80.md` §5.2. Bits 0-3/5-7 still open. Baum, Anhang A p.94, names the
+  bits for users as 0 = serial receive, 1 = peripherals (printer and floppy), 4 = 1/64 s
+  timer, 6 = 1/2 s timer, and says a 35H bit of 0 disables that cause. That agrees with
+  the TRM table; it doesn't settle edge/level behaviour.
 - §3.9: the SWRT/SRRT RTC param-block byte layout; the ADC value range/scaling for
   SRA0/SRA1/SRA2; the SWPON power-on-condition mask bits.
 - §3.6.2 / §7.6: TC8576F parameter-register and command-byte formats.
@@ -384,5 +432,8 @@ for §6.1 never slips, so **it answers the probe**.
   `PC-1600-Peripherals-Hardware.md` §1.2.2/§1.3 (plotter/Centronics dual-mode) and §2.6
   (floppy port-level command/status registers).
 - Confirm the 50–5FH LCD per-port decode against real hardware.
-- OPC (18H) buzzer-bit discrepancy between Appendix 6's gloss and the gate-logic-derived
-  table (§2.5) — not resolved, flagged in place.
+- ~~OPC (18H) buzzer-bit discrepancy between Appendix 6's gloss and the gate-logic-derived
+  table (§2.5)~~ — **resolved** by Baum, Anhang A p.93: b7 = cassette output *and*
+  loudspeaker, b6 = BEEP ON/OFF.
+- F register (17H): the SXO → FY path (tone while serial data is actually being sent
+  through L, 16H), and whether G (19H) affects the modulation clocks, are unmeasured.
