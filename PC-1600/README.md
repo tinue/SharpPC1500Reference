@@ -113,8 +113,9 @@ reference, and it was used across this sub-corpus to:
 - resolve a handful of points the manuals leave ambiguous or contradictory (e.g. the
   keyboard strobe/sense port binding, the LCD-controller port decode, the routing of
   `C000–FFFF` when `Port 31H b7 = 1`);
-- provide a concrete answer where the manuals are silent (e.g. how much wait-state the
-  SC-7852 inserts — modelled there as none, nominal Zilog timing).
+- provide a concrete answer where the manuals are silent. (One such answer was wrong: that
+  emulator models the SC-7852 with no wait states. Real-hardware BEEP pitch shows one wait
+  per M1 cycle — `PC-1600-CPU-SC7852-Z80.md` §2.3.)
 
 Where the manuals and this implementation agree, the fact is stated plainly. Where a fact
 rests on the implementation alone, the document says so ("not confirmed against the

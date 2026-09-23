@@ -246,6 +246,36 @@ Direct-call (`CALL <addr>`); both sound regardless of the BASIC `BEEP ON/OFF` se
 - **frequency = 1 300 000 / (166 + 22·A)** Hz
 - **duration = BC · (166 + 22·A) / 1 300 000 = BC / frequency** seconds
 
+**Measured on a real unit (2026-09-23, microphone recordings):**
+
+- **Pitch.** `A`=200 → **287.13 Hz**, `A`=50 → **1038.15 Hz**, both 0.22 % below the
+  exact loop count. At 3.58 MHz the tone loop (P1-B3 `5EB9H`) is **60·A + 441 T-states
+  per period**: 52·A + 389 nominal plus one wait per M1 cycle
+  (`PC-1600-CPU-SC7852-Z80.md` §2.3). The TRM formula above is a rounded form of this.
+- **Duration.** Exactly `BC` periods. `BC` = 1 is silent: the loop sets the line high,
+  counts down to zero and exits before it ever goes low.
+- **Repeats** (`DE` > 1, BASIC `BEEP n,A,d`). Between tones the ROM (P1-B3 `5F12H`)
+  counts **6 rising edges of PB5**, the sub-CPU's free-running 64 Hz square wave on port
+  1FH bit 5 (§2). Tone and pause together therefore take
+  **(⌈T / P⌉ + 5) · P**, with P = 1/64 s and T the tone length (`BC` periods).
+  Confirmed on hardware for:
+
+  | BEEP | Tone T | Period |
+  |---|---|---|
+  | 5,200,5 | 17.4 ms | 109.4 ms (7 P) |
+  | 5,50,100 | 96.1 ms | 187.5 ms (12 P) |
+  | 20,200,20 | 69.5 ms | 156.25 ms (10 P) |
+  | 5,200,100 | 348 ms | 437.5 ms (28 P) |
+
+  All periods are steady; a real unit never adds a tick. A long ISR during the pause,
+  such as the slow sub-CPU path in §7.3, would eat PB5 edges and add a tick.
+- **Acoustic response.** Relative to its 2–3 kHz peak, the buzzer reproduces a
+  287 Hz fundamental at about −52 dB, 861 Hz at −21 dB and 1.4 kHz at −7 dB. It then
+  falls to −10…−25 dB over 5–7 kHz. A low BEEP is heard through its 3rd–11th
+  harmonics, not its fundamental. Mic recordings vary ±5 dB take to take. One point, a
+  1038 Hz fundamental, came out ~12 dB above that curve, so 0.8–1.4 kHz is not pinned
+  down.
+
 The keyboard-click routine is `SBEEP` (IOCS 01H via the timer dispatcher, §7).
 
 ## 7. Timer, RTC, and analog port (TRM §3.9)
@@ -278,6 +308,7 @@ The sub-CPU (LU-57813P) owns the real-time clock, the wakeup/alarm timers, and a
 | SWAB | 22H | set the alarm-signal-generation condition |
 | SRAB | 23H | read the alarm-signal-generation condition (as set by SWAB) |
 | SWA1A | 24H | set the trigger thresholds for a software interrupt on the analog-input value — thresholds are stored at `F12DH` (lower) / `F12EH` (upper), `PC-1600-Work-Area-Map.md` §3.9 |
+| *(undocumented)* | 25H | sub-CPU capability probe, run once at boot (P0-B0 `03B7H`); result ORed into `F0B8H`. See §7.3 |
 
 ### 7.1 Sub-CPU interrupt bitfield (SWMSK / SRMSK / SRIRQ, in `A`)
 
@@ -295,6 +326,7 @@ events the sub-CPU itself raises, all of which funnel into port-32H/35H **bit 6*
 
 (mask: bit = 1 → enabled; SRIRQ: bit = 1 → that event is pending)
 
+
 ### 7.2 Analog-input connector (CN6)
 
 Physical 3-pin header, separate from the serial connectors, carrying the raw signal that
@@ -311,6 +343,31 @@ board) — it does not pass through the TC8576F UART or the BX7269W RS-232C leve
 (`PC-1600-Serial-Hardware-Notes.md` §1). Source: PC-1600 main-board wiring diagram scan
 (2026-09-04); pin labels 2/3 are legible, exact silkscreen names not cross-checked
 against the TRM.
+
+### 7.3 Command-byte pacing: IOCS 25H and `F0B8H` bit 0 (ROM disassembly)
+
+Every command byte the Z-80 sends to the sub-CPU goes out through one routine
+(P2-B6 `A9FBH`). It writes the byte to port 21H, the TC8576F parallel port wired to the
+LU-57813P. It has two modes, chosen by **`F0B8H` bit 0**:
+
+- **bit 0 = 1:** `OUT (21H),A` immediately.
+- **bit 0 = 0:** first wait for the next **PB5 transition** (port 1FH bit 5, the 64 Hz
+  signal), polling the TC8576F status (`AA33H`) meanwhile, then send. Each byte then costs
+  up to one 64 Hz half period, **7.8 ms**.
+
+Boot clears bit 0 and then ORs in the result of timer **IOCS 25H** (P0-B0 `03B7H`,
+handler P2-B6 `A951H`). It isn't in the TRM's IOCS list; it is a handshake:
+
+1. send `B0H` (on the wire `4FH`: the routine complements every byte). If the answer
+   read from port 33H is `AAH`,
+2. send `B1H` (`4EH`). If the answer is `55H`, return A = 1, otherwise A = 0.
+
+So a sub-CPU that answers `AAH` / `55H` gets unpaced command transfer, and one that
+doesn't is driven in lock-step with its 64 Hz tick. It looks like provision for two
+sub-CPU revisions (an assumption; no source names them). The 0.5 s-timer ISR sends two
+bytes (requests 5DH and 5CH). In paced mode it therefore runs ~8–16 ms and always
+spans a PB5 edge, which would make BEEP repeats slip a tick (§6.1). The unit measured
+for §6.1 never slips, so **it answers the probe**.
 
 ## TODO
 
