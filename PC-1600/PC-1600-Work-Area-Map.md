@@ -244,6 +244,9 @@ resolved.)*
 
 | Addr | Name | Contents |
 |---|---|---|
+| F865/F866H | PROGRAM START H/L | start address of the BASIC program, **high byte first** (bank in `F02BH`) *(see note)* |
+| F867/F868H | PROGRAM END H/L | end address of the BASIC program, high byte first (bank in `F02CH`). Start = end (and `F02B` = `F02C`) ⇒ no program *(see note)* |
+| F869/F86AH | EDIT / MERGE HEAD H/L | head address of the program being edited or merged *(see note)* |
 | F88FH | OUTPUT BUFFER POINTER | pointer into the output buffer |
 | F890H | FOR POINTER | stack pointer for `FOR…NEXT` |
 | F891H | GOSUB POINTER | stack pointer for `GOSUB` |
@@ -271,6 +274,12 @@ resolved.)*
 
 *(Note the H-then-L labelling here: these follow the Block-C / PC-1500 big-endian
 convention, §1.1.)*
+
+**Note on F865–F86A.** These three pointers are not in the Systemhandbuch table. They are the PC-1500's `7865`/`7867`/`7869` (`BASPRG_ST`/`END`/`EDT`) at the same offset in the relocated work area, and big-endian like them. Confirmed in the ROM disassembly (`~/Development/sharp/pc1600/disasm/z80/`):
+- The `NEW` path (`rom3b.asm`, `65C8H`) sets start = end = `(F029H AND 7FH)`:`C5H`, i.e. the first byte after the 197-byte reserve, and copies the program's bank index from `F02AH` into both `F02BH` and `F02CH`.
+- The emptiness test (`romce1600-2.asm`, `3970H`) compares `F865`/`F867` and `F02B`/`F02C`.
+
+Klaus Ditze's disk-MERGE routine (*Programme, Tips & Tricks für den PC-1600*, 1987, pp. 9–12) relies on the same fields. It saves `(F865)`/`(F02B)`, moves the start to `(F867)`+1 so that `LOAD` appends, then restores them, puts the merged block's head in `F869` and `F89E` (`CURRENT TOP`), and copies the bank from `F1C4` (`MERGED`) to `F1C1` (`CURRENT`).
 
 ### 3.6 BASIC variable storage
 
@@ -408,7 +417,7 @@ A layout — Appendix 7 gives it real content:
 | F1BFH | "ROM-bit" for the peripheral token table; b7 of F1C0H | PC-1500 token table |
 | F1C1H–F1CEH | **logical banks**: `CURRENT`, `SEARCH START`, `SEARCH FOUND`, `MERGED`, `PREVIOUS I`, `PREVIOUS II`, `BREAK I`, `BREAK II`, `ERROR I`, `ERROR II`, `ON ERROR I`, `ON ERROR II`, `RESTORE`, `INTERPRET` (one byte each, in that order) |
 | F1CFH–F1D4H | BASIC interrupts — `STOP`/`ON` state, request-pending flags |
-| F1D5H | `TITLE` |
+| F1D5H | `TITLE` — currently selected program area: 0 = S0 (internal), 1 = S1, 2 = S2 |
 | F1D6H–F1DAH | one info byte per logical bank — b7: program/AEIM module; b5–b4: physical port address (value for port 31H); b1: slot 2; b0: slot 1 — this is `ADTBL+1`…`ADTBL+5`, see §4 below |
 | F1DBH–F21CH | BASIC stack II |
 
@@ -607,6 +616,7 @@ When the S0 work area spans more than one 16 KB bank (a module used as expansion
 
 | Addr | Name | Meaning |
 |---|---|---|
+| F029H / F015H / F01FH | — | b6–b0: high byte (page) of the program-area base of S0 / S1 / S2. `NEW` masks the byte with `7FH`, so b7 is a separate flag. The reserve-key area is at page:08H–page:C4H, the same 189-byte layout as the PC-1500's `4008`–`40C4` (e.g. `C008H` on a stock S0). Source: Ditze's reserve-save program (1987, pp. 26–27), which computes `PEEK(S−1)*256+8` from the `SxMTb` address `S` |
 | F02AH | `S0MTb` | 1-based `ADTBL` index where **S0**'s bank list starts; S0 runs from there through entry 5. Value not in 1..5 ⇒ S0 has no module banks (internal RAM only). |
 | F016H / F018H | `S1MTb` / `S1MBb` | first / last `ADTBL` index of **S1**'s bank list *when S1 is a program module*. `FEH` (anything not 1..5) ⇒ S1 is not a program module. |
 | F020H / F022H | `S2MTb` / `S2MBb` | same for **S2**. |

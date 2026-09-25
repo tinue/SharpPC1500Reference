@@ -391,7 +391,7 @@ memory file (`PC-1600-Filesystem.md`).
 > at least two logical banks (4 for printer entry points, per §1.1 above). Given two
 > independent sources agree on Bank 5 and "4"/"5" are an easy scan/OCR digit confusion,
 > this is very likely a transcription slip in that source, not a real discrepancy —
-> flagged for confirmation on real hardware rather than silently corrected.
+> flagged for confirmation on real hardware rather than silently corrected. **Resolved:** Ditze's own DISKCOPY program (*Programme, Tips & Tricks für den PC-1600*, 1987, pp. 35–36), which is working code by the same author, encodes the disk call as `E7 05 08 40` = `RST 20H` / `CALL Bank 5, 4008H`. It calls `DREAD` (C=`84H`) and `DWRITE` (C=`85H`) with A=`01` (X:), B=`10H` (16 sectors = 8 KB, spanning two tracks), D = even track `00`–`0EH`, E=`00` and HL = buffer. So **Bank 5** is correct, and one `DREAD` call can run across a track boundary. The buffer is 8 KB+26 bytes reserved with `CALL &02DD,A`, and its address is read from `PTR3` (F034/F035H).
 
 ### 2.1 Disk geometry (§3.8.2)
 
