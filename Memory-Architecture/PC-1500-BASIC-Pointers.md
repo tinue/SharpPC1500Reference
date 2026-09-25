@@ -31,10 +31,21 @@ Variables tracking the execution state of the BASIC interpreter.
 
 | Pointer | Start Address | Description |
 | :--- | :--- | :--- |
-| `CURR_LINE` | `$78A0` | **Current Line:** Number of the BASIC line currently executing. |
-| `PREV_LINE` | `$78A2` | **Previous Line:** Used for error reporting and `CONT`. |
+| `CURR_LINE` | `$789C` | **Current Line:** Number of the BASIC line currently executing. `$789E` holds the start address of the program containing it. |
 | `TRACE_ON` | `$788D` | **Trace Flag:** (Byte) Non-zero if `TRON` is active. |
 | `TRACE_PARAM` | `$788E` | **Trace Vector:** Vector used for trace output handling. |
+
+**Saved-position slots.** Each slot is 6 bytes: line address, line number, and start of the program containing that line. `VEJ (D4) P1` saves the position in Y into a slot, and `VEJ (D6) P1` restores one (P1 = the slot's low byte):
+
+| Slot | Address | Holds |
+| :--- | :--- | :--- |
+| `PREV_*` | `$78A0`–`$78A5` | Previous line (D4 `A0`) |
+| `SRCH_*` | `$78A6`–`$78AB` | Line found by the last line-number search (D6 `A6`) |
+| `BRK_*` | `$78AC`–`$78B1` | Where BREAK happened (D4/D6 `AC`) |
+| `ERR_*` | `$78B2`–`$78B7` | Where the last ERROR happened (D4 `B2`) |
+| `ON_ERR_*` | `$78B8`–`$78BD` | `ON ERROR GOTO` target (D6 `B8`) |
+
+This layout comes from the ROM disassembly's label file and Schlieker's *PC-1500 ROM-Unterprogramme* (1983), and matches the operands the ROM passes to D4/D6. It replaces earlier entries that called `$78A0` the current line, `$78A4` the ON ERROR vector and `$78B8` the FOR/GOSUB stack depth.
 
 ## 4. Memory Limits and Status
 | Pointer | Start Address | Description |
@@ -52,9 +63,6 @@ These variables control interpreter behavior and temporary states.
 | `DISP_CTRL` | `$7880` | **Display Flags:** Controls LCD refresh and auto-off timers. |
 | `BREAK_STAT` | `$7881` | **Break Status:** Tracks BREAK key interrupts and execution pauses. |
 | `IN_BUF_PTR` | `$7892` | **Input Buffer Cursor:** Points to the current character in the `$7Bxx` input area. |
-| `ON_ERR_VEC` | `$78A4` | **Error Vector:** 16-bit address for the `ON ERROR GOTO` handler. |
-| `SRCH_PTR` | `$78A6` | **ROM Search Pointer:** Temporary workspace for program/variable scanning. |
-| `STK_FOR_GSB` | `$78B8` | **Logic Stack Pointer:** Current depth of the FOR-NEXT and GOSUB stacks. |
 
 ## 6. RAM Detection Process (Reset)
 The PC-1500 determines the value of `RAM_END` dynamically during every hardware reset (at ROM address `$E000`). 

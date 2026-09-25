@@ -443,7 +443,7 @@ For ME1 source: use `lin #(x)` (not available — LIN has no ME1 form). Use `lda
 ```asm
     vmj  0x00            ; CD 00 -- call vmj vector 00
     .db 0x20           ; P1 -- lower bound
-    .db 0x7E           ; P2 -- upper bound
+    .db 0x7F           ; P2 -- first value ABOVE the range (exclusive)
     .db OUT_OF_RANGE-.-1  ; P3 -- relative forward branch offset if out of range
     ; falls through here if in range
 OUT_OF_RANGE:
@@ -1765,40 +1765,40 @@ There are 28 valid VEJ operands in the range `0xC0`–`0xFE` (even values only).
 
 **PC-1500 VEJ Vector Table (partial -- ROM-defined subroutines):**
 
-| Syntax | PC-1500 Function |
-|---|---|
-| `vej (C0)` | Load next token/character to U register |
-| `vej (C2)` | Check if character in U matches argument; branch if not |
-| `vej (C4)` | Check if next character in U matches argument; branch if not |
-| `vej (C6)` | Decrement Y register by 2 (token) or 1 (character) |
-| `vej (C8)` | Syntax check: jump forward if not end-of-command |
-| `vej (CA)` | Transfer X register to variable at offset `b1` |
-| `vej (CC)` | Load X register from variable address at offset `b1` |
-| `vej (CE)` | Determine address of variable `b1`; branch if not numeric |
-| `vej (D0)` | Convert AR-X to integer into U register; branch on overflow |
-| `vej (D2)` | Reseed AR-X with integer or process CSI |
-| `vej (D4)` | Transmit current processing status pointer |
-| `vej (D6)` | Load address pointer from memory to AR-Y |
-| `vej (D8)` | Check if program expires (Z=0 if so) |
-| `vej (DA)` | Cache variable address from U register and length from AR-X |
-| `vej (DC)` | Load CSI from AR-X |
-| `vej (DE)` | Evaluate formula pointed to by Y; jump forward on error |
-| `vej (E0)` | Error check if UH ≠ 0x00 |
-| `vej (E2)` | Start of BASIC interpreter |
-| `vej (E4)` | Output error 1, return to editor |
-| `vej (E6)` | Transfer AR-X to AR-Y |
-| `vej (E8)` | Convert AR-X to absolute BCD form |
-| `vej (EA)` | Push AR-X one nibble left |
-| `vej (EC)` | Clear arithmetic register X |
-| `vej (EE)` | AR-X = AR-X + AR-U |
-| `vej (F0)` | AR-X = AR-X + AR-Y (floating-point addition) |
-| `vej (F2)` | Clear LCD display. **Does not reset cursor pointer at `0x7875`** — always follow with `ldi a,0x00` then `sta (CURSOR_PTR)`. |
-| `vej (F4)` | Load U register with 16-bit value from address `w1` |
-| `vej (F6)` | Transfer U register to address `w1` |
-| `vej (F8)` | Maskable interrupt routine entry |
-| `vej (FA)` | Timer interrupt routine entry |
-| `vej (FC)` | Non-maskable interrupt routine entry (executes RTI) |
-| `vej (FE)` | Reset routine entry |
+| Syntax | Addr | PC-1500 Function |
+|---|---|---|
+| `vej (C0)` | `0xDD08` | Load next token/character to U register |
+| `vej (C2)` | `0xDCD4` | Check if character in U matches argument; branch if not |
+| `vej (C4)` | `0xDCD5` | Check if next character in U matches argument; branch if not |
+| `vej (C6)` | `0xDD13` | Decrement Y register by 2 (token) or 1 (character) |
+| `vej (C8)` | `0xDCC5` | Syntax check: jump forward if not end-of-command |
+| `vej (CA)` | `0xC001` | Transfer X register to variable at offset `b1` |
+| `vej (CC)` | `0xDDC8` | Load X register from variable address at offset `b1` |
+| `vej (CE)` | `0xD45D` | Determine address of variable `b1`; branch if not numeric |
+| `vej (D0)` | `0xD5F9` | Convert AR-X to integer into U register; branch on overflow |
+| `vej (D2)` | `0xDD1A` | Reseed AR-X with integer or process CSI |
+| `vej (D4)` | `0xDEE3` | Save BASIC position Y into slot P1 (`A0` previous line, `AC` BREAK, `B2` ERROR) |
+| `vej (D6)` | `0xDED1` | Restore BASIC position into Y and `0x789C`–`0x789F` from slot P1 (`A6` search, `AC` BREAK, `B8` ON ERROR) |
+| `vej (D8)` | `0xDF3B` | Check if program expires (Z=0 if so) |
+| `vej (DA)` | `0xC00E` | Cache variable address from U register and length from AR-X |
+| `vej (DC)` | `0xDEBC` | Load CSI from AR-X |
+| `vej (DE)` | `0xD6DF` | Evaluate formula pointed to by Y; jump forward on error |
+| `vej (E0)` | `0xCD8B` | Error check if UH ≠ 0x00 |
+| `vej (E2)` | `0xC400` | Start of BASIC interpreter |
+| `vej (E4)` | `0xCD89` | Output error 1, return to editor |
+| `vej (E6)` | `0xF70D` | Transfer AR-X to AR-Y |
+| `vej (E8)` | `0xF661` | Convert AR-X to absolute BCD form |
+| `vej (EA)` | `0xF79C` | Push AR-X one nibble left |
+| `vej (EC)` | `0xF757` | Clear arithmetic register X |
+| `vej (EE)` | `0xF7CC` | AR-X = AR-X + AR-U |
+| `vej (F0)` | `0xEFBA` | AR-X = AR-X + AR-Y (floating-point addition) |
+| `vej (F2)` | `0xEE71` | Clear LCD display. **Does not reset cursor pointer at `0x7875`** — always follow with `ldi a,0x00` then `sta (CURSOR_PTR)`. |
+| `vej (F4)` | `0xDBBC` | Load U register with 16-bit value from address `w1` |
+| `vej (F6)` | `0xDDB5` | Transfer U register to address `w1` |
+| `vej (F8)` | `0xE171` | Maskable interrupt routine entry |
+| `vej (FA)` | `0xE22C` | Timer interrupt routine entry |
+| `vej (FC)` | `0xE22B` | Non-maskable interrupt routine entry (executes RTI) |
+| `vej (FE)` | `0xE000` | Reset routine entry |
 
 ---
 
@@ -2014,11 +2014,12 @@ On the PC-1600, the start is not set with an absolute address, because the LH580
 | `TRACE_ON` | `0x788D` | Non-zero if `TRON` is active |
 | `TRACE_PARAM` | `0x788E` | Vector used for trace output handling |
 | `VAR_START` | `0x7899` | Start of dimensioned variables (grows downward from top of RAM) |
-| `CURR_LINE` | `0x78A0` | Number of the BASIC line currently executing |
-| `PREV_LINE` | `0x78A2` | Previous line number, used for error reporting and `CONT` |
-| `ON_ERR_VEC` | `0x78A4` | 16-bit address of the `ON ERROR GOTO` handler |
-| `SRCH_PTR` | `0x78A6` | Scratch workspace for program/variable scanning |
-| `STK_FOR_GSB` | `0x78B8` | Current depth of the FOR-NEXT / GOSUB logic stack |
+| `CURR_LINE` | `0x789C` | Current line number (`0x789E` = start of the program containing it) |
+| `PREV_*` | `0x78A0` | Previous line: address, line number, program start (6 bytes) |
+| `SRCH_*` | `0x78A6` | Line found by the last search: address, line number, program start |
+| `BRK_*` | `0x78AC` | Where BREAK happened: address, line number, program start |
+| `ERR_*` | `0x78B2` | Where the last ERROR happened: address, line number, program start |
+| `ON_ERR_*` | `0x78B8` | `ON ERROR GOTO` target: address, line number, program start |
 | `DATA_PTR` | `0x78BE` | Cursor into `DATA` statements |
 | `RAM_END` | `0x7A13` / `0x7A33` | High byte of the physical RAM limit |
 | `WARM_START` | `0x7A20` | Warm-start flag: `0x01` = warm start, else cold start |
@@ -2228,40 +2229,40 @@ MY_STR_ROUTINE:
 The VEJ instruction jumps to the address stored at `0xFF00 + operand`. Valid operands: even values 0xC0–0xFE (28 entries).
 **Syntax: `vej (nn)` — plain hex digits in parentheses, no `0x` prefix inside the parens.**
 
-| Syntax | ROM Function |
-|---|---|
-| `vej (C0)` | Load next token/character into U register |
-| `vej (C2)` | Check if character in U matches inline arg; branch if not |
-| `vej (C4)` | Check if next character in U matches inline arg; branch if not |
-| `vej (C6)` | Decrement Y by 2 (token) or 1 (character) |
-| `vej (C8)` | Syntax check: jump forward if not end-of-command |
-| `vej (CA)` | Transfer X to variable at offset b1 |
-| `vej (CC)` | Load X from variable address at offset b1 |
-| `vej (CE)` | Determine address of variable b1; branch if not numeric |
-| `vej (D0)` | Convert AR-X to integer into U; branch on overflow |
-| `vej (D2)` | Reseed AR-X with integer or process CSI |
-| `vej (D4)` | Transmit current processing status pointer |
-| `vej (D6)` | Load address pointer from memory to AR-Y |
-| `vej (D8)` | Check if program expires (Z=0 if so) |
-| `vej (DA)` | Cache variable address from U and length from AR-X |
-| `vej (DC)` | Load CSI from AR-X |
-| `vej (DE)` | Evaluate formula pointed to by Y; jump forward on error |
-| `vej (E0)` | Error check: branch if UH ≠ 0x00 |
-| `vej (E2)` | Start of BASIC interpreter |
-| `vej (E4)` | Output error 1, return to editor |
-| `vej (E6)` | Transfer AR-X to AR-Y |
-| `vej (E8)` | Convert AR-X to absolute BCD form |
-| `vej (EA)` | Push AR-X one nibble left |
-| `vej (EC)` | Clear arithmetic register X (ARX = 0) |
-| `vej (EE)` | AR-X = AR-X + AR-U |
-| `vej (F0)` | AR-X = AR-X + AR-Y (floating-point addition) |
-| `vej (F2)` | Clear LCD display. **Does not reset cursor pointer at `0x7875`** — always follow with `ldi a,0x00` then `sta (CURSOR_PTR)`. |
-| `vej (F4)` | Load U with 16-bit value from address w1 |
-| `vej (F6)` | Transfer U to address w1 |
-| `vej (F8)` | Maskable interrupt routine entry |
-| `vej (FA)` | Timer interrupt routine entry |
-| `vej (FC)` | Non-maskable interrupt routine entry (executes RTI) |
-| `vej (FE)` | Reset routine entry |
+| Syntax | Addr | ROM Function |
+|---|---|---|
+| `vej (C0)` | `0xDD08` | Load next token/character into U register |
+| `vej (C2)` | `0xDCD4` | Check if character in U matches inline arg; branch if not |
+| `vej (C4)` | `0xDCD5` | Check if next character in U matches inline arg; branch if not |
+| `vej (C6)` | `0xDD13` | Decrement Y by 2 (token) or 1 (character) |
+| `vej (C8)` | `0xDCC5` | Syntax check: jump forward if not end-of-command |
+| `vej (CA)` | `0xC001` | Transfer X to variable at offset b1 |
+| `vej (CC)` | `0xDDC8` | Load X from variable address at offset b1 |
+| `vej (CE)` | `0xD45D` | Determine address of variable b1; branch if not numeric |
+| `vej (D0)` | `0xD5F9` | Convert AR-X to integer into U; branch on overflow |
+| `vej (D2)` | `0xDD1A` | Reseed AR-X with integer or process CSI |
+| `vej (D4)` | `0xDEE3` | Save BASIC position Y into slot P1 (`A0` previous line, `AC` BREAK, `B2` ERROR) |
+| `vej (D6)` | `0xDED1` | Restore BASIC position into Y and `0x789C`–`0x789F` from slot P1 (`A6` search, `AC` BREAK, `B8` ON ERROR) |
+| `vej (D8)` | `0xDF3B` | Check if program expires (Z=0 if so) |
+| `vej (DA)` | `0xC00E` | Cache variable address from U and length from AR-X |
+| `vej (DC)` | `0xDEBC` | Load CSI from AR-X |
+| `vej (DE)` | `0xD6DF` | Evaluate formula pointed to by Y; jump forward on error |
+| `vej (E0)` | `0xCD8B` | Error check: branch if UH ≠ 0x00 |
+| `vej (E2)` | `0xC400` | Start of BASIC interpreter |
+| `vej (E4)` | `0xCD89` | Output error 1, return to editor |
+| `vej (E6)` | `0xF70D` | Transfer AR-X to AR-Y |
+| `vej (E8)` | `0xF661` | Convert AR-X to absolute BCD form |
+| `vej (EA)` | `0xF79C` | Push AR-X one nibble left |
+| `vej (EC)` | `0xF757` | Clear arithmetic register X (ARX = 0) |
+| `vej (EE)` | `0xF7CC` | AR-X = AR-X + AR-U |
+| `vej (F0)` | `0xEFBA` | AR-X = AR-X + AR-Y (floating-point addition) |
+| `vej (F2)` | `0xEE71` | Clear LCD display. **Does not reset cursor pointer at `0x7875`** — always follow with `ldi a,0x00` then `sta (CURSOR_PTR)`. |
+| `vej (F4)` | `0xDBBC` | Load U with 16-bit value from address w1 |
+| `vej (F6)` | `0xDDB5` | Transfer U to address w1 |
+| `vej (F8)` | `0xE171` | Maskable interrupt routine entry |
+| `vej (FA)` | `0xE22C` | Timer interrupt routine entry |
+| `vej (FC)` | `0xE22B` | Non-maskable interrupt routine entry (executes RTI) |
+| `vej (FE)` | `0xE000` | Reset routine entry |
 
 ---
 
@@ -2277,11 +2278,11 @@ The PC-1500 ROM exposes subroutines via three mechanisms:
 Many routines consume inline bytes placed immediately after the call opcode. The return address on the stack points past those bytes; RTN resumes at the correct location. Write inline parameter bytes directly with `.db`:
 
 ```asm
-    vmj  0x00            ; CD 00 -- range-check ul vs [P1..P2]
+    vmj  0x00            ; CD 00 -- range-check ul in [P1..P2)
     .db 0x20           ; P1 -- lower bound
-    .db 0x7E           ; P2 -- upper bound
+    .db 0x7F           ; P2 -- first value ABOVE the range (exclusive)
     .db OUT_OF_RANGE-.-1  ; P3 -- relative forward branch if out of range
-    ; falls through here if ul in [P1..P2]
+    ; falls through here if 0x20 <= ul < 0x7F
 OUT_OF_RANGE:
 ```
 
@@ -2303,13 +2304,15 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 
 ### VMJ Subroutine Table
 
+Source: H-G. Schlieker, *PC-1500 ROM-Unterprogramme* (Bremen, August 1983), which also underlies the ROM disassembly's routine comments. Every address below was checked against the ROM's own vector table at `0xFF00`–`0xFFFF`, which is identical in revisions A01, A03 and A04. That check corrected four addresses Schlieker had wrong (`0x3E`, `0x56`, `0x7E`, and `vej (F6)` = `0xDDB5`), and showed that `0xAA`/`0xB0` point to CE-150 jump stubs.
+
 > **Syntax reminder:** `vmj 0xnn` (plain byte immediate, `0x` prefix, no parentheses). Example: `vmj 0x92`, not `vmj (0x92)`. The "VMJ" column below shows the vector number as `(0xxx)` for readability, but in source code always write `vmj 0xxx`.
 
 #### Syntax / Token Parsing
 
 | VMJ | Addr | Description | Syntax | Entry | Modified |
 |---|---|---|---|---|---|
-| `(0x00)` | `0xDCB7` | Range-check UL ∈ [P1..P2]; branch P3-relative if out | `CD 00 P1 P2 P3` | U=token/char | X, A |
+| `(0x00)` | `0xDCB7` | Range-check UL ∈ [P1..P2): P2 is the first value *above* the range (two `CIN` + `BCR`). Branch P3-relative if out of range or if U holds a token (UH≠0) | `CD 00 P1 P2 P3` | U=token/char | X, A |
 | `(0x02)` | `0xDCB6` | Like (0x00) but first loads next token via (0xC0) | `CD 02 P1 P2 P3` | Y→BASIC mem | X, Y, A |
 | `(0x04)` | `0xDCC6` | Check UL for EOC (0x3A) or EOL (0x0D); branch P1 if neither | `CD 04 P1` | U=char | X, A; C=1 if EOC |
 | `(0x0C)` | `0xDE97` | Get string length at Y; load AR-X with CSI | `CD 0C` | Y→string | X, Y, U, A |
@@ -2318,8 +2321,8 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 | `(0x1C)` | `0xFA89` | Find BASIC command start from token in U, using token table at X | `CD 1C` | U=token, X→table | — |
 | `(0x20)` | `0xDF72` | Advance Y to next line number (max 77 bytes); Z=1 if within limit | `CD 20` | Y→BASIC | X, Y, U, A |
 | `(0x22)` | `0xDF63` | Load next token/char from BASIC into U; load AR-X CSI if string follows | `CD 22` | Y→BASIC | X, Y, U, AR-X; C=1 if string |
-| `(0x26)` | `0xDB87` | Check AR-X: branch P1 if BCD (not string); C=0 if BCD | `CD 26 P1` | AR-X=value | X, UH, A |
-| `(0x28)` | `0xDBB1` | Check variable dimensionality (0x788C); branch P1 if 2D; C=1 if 1D | `CD 28 P1` | — | X, UH, A |
+| `(0x26)` | `0xDB87` | Check AR-X holds a CSI: if it holds a BCD number (`7A04` < `0xB2`), set UH=`0x11` (ERROR 17), C=0 and branch P1 | `CD 26 P1` | AR-X=value | X, UH, A |
+| `(0x28)` | `0xDBB1` | Check variable dimensionality (0x788C): if ≠ 1, set UH=`0x12` (ERROR 18) and branch P1. C=1 if 1-D | `CD 28 P1` | — | X, UH, A |
 | `(0x34)` | `0xDF23` | Multi-branch: search A in inline char table; branch to paired offset on match | `CD 34 P1 P2 P3 P4 P5…` | A=char, UH=token flag | X, A; Y/U unchanged |
 | `(0x3C)` | `0xFA74` | Find token table for current device (A=(OPN) doubled) | `CD 3C` | A=(OPN) | X, A; C=1 if found |
 | `(0xCE)` | `0xD45D` | Find variable address from name at Y-area; same params as (0x0E) | `CE P1 P2` | Y→var name | same as (0x0E) |
@@ -2334,7 +2337,7 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 | `(0x10)` | `0xDD2D` | Convert U to format per P1: 0x00=BCD→AR-X, 0x40=ASCII→(Y), 0x80=signed int→AR-X, 0xE0=3-digit | `CD 10 P1` | U=int | AR-X, all CPU regs |
 | `(0x16)` | `0xDFF5` | Compute distance from X to BASIC program end | `CD 16` | X=addr | U, A |
 | `(0x24)` | `0xDEAF` | Load CSI into AR-X[7A04–7A07] from X=address, A=length | `CD 24` | X=addr, A=len | U, A=0xD0 |
-| `(0x2A)` | `0xD03E` | Copy system message from ROM page 0xC3xx to Y-buffer; P1=src low byte, P2=count | `CD 2A P1 P2` | Y→dest | X, Y, U, A |
+| `(0x2A)` | `0xD03E` | Copy system message from ROM page 0xC3xx to Y-buffer; P1=src low byte, P2=count. Known: `5B 09` = " BREAK IN", `64 06` = " ERROR", `61 03` = " IN" | `CD 2A P1 P2` | Y→dest | X, Y, U, A |
 | `(0x30)` | `0xDC16` | Decrement BASIC stack pointer (0x7882) by 8; save AR-X to stack | `CD 30` | — | X, UL=0xFF, A |
 | `(0x32)` | `0xD071` | Push U (16-bit address) onto BASIC stack; increment (0x7882) by 2 | `CD 32` | U=addr | X, A |
 | `(0x36)` | `0xDFOF` | Find string literal or string variable at Y; load AR-X CSI | `CD 36` | Y→input buf or BASIC | X, Y, U, A; C=1 if found |
@@ -2348,7 +2351,7 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 | `(0x50)` | `0xDA71` | 16×16-bit integer multiply U×Y → X:Y; C=1 if result > 16 bits | `CD 50` | U, Y=integers | X, Y, U, A |
 | `(0x52)` | `0xF663` | Normalize AR-X (exponent/mantissa align); A=sign. Error 0x19→UH+C if overflow | `CD 52` | A=sign, AR-X=raw result | X, Y, U, A |
 | `(0x54)` | `0xF7B0` | Set XH=YH=0x7A — required before most AR math calls | `CD 54` | — | XH=0x7A, YH=0x7A only |
-| `(0x56)` | `0xF7B0` | Copy 8 bytes (XH:00–07) → (YH:00–07); if both→7Axx: AR-Y→AR-X | `CD 56` | X, Y→areas | XL=0x18, YL=0x08, UL=0xFF |
+| `(0x56)` | `0xF73D` | Copy 8 bytes (XH:10–17) → (YH:00–07); if both→7Axx: AR-Y→AR-X | `CD 56` | X, Y→areas | XL=0x18, YL=0x08, UL=0xFF |
 | `(0x58)` | `0xF084` | Division: AR-X = AR-X / AR-Y; div/0 → UH=0x1A, C=1 | `CD 58` | AR-X, AR-Y, XH=YH=0x7A | X=0x7A00, Y=0x7A08, U, A |
 | `(0x5E)` | `0xF7A7` | Transfer RNG value (0x7B01–0x7B07) to AR-X | `CD 5E` | YH=0x7A | X=0x7A08, Y, UL |
 | `(0x5C)` | `0xF61B` | Generate random number | `CD 5C` | — | — |
@@ -2365,9 +2368,9 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 | `(0x74)` | `0xF775` | Shift AR (xx01–xx07) right one nibble; XH selects page | `CD 74` | XH=page | X=xx07, A=prev(xx07) |
 | `(0x76)` | `0xF75F` | Clear AR (xx01–xx07) to 0x00; XH selects page | `CD 76` | XH=page | X=xx08, A=0x00 |
 | `(0x78)` | `0xF72F` | Copy AR sign+mantissa (XH:01–07) → (YH:09–0F) | `CD 78` | X, Y | X=XH08, Y=YH10 |
-| `(0x7A)` | `0xF7DD` | Subtract AR-X and AR-Y mantissas; exponent ignored | `CD 7C` then `7A` | XH=YH=0x7A | X=0x7A00, Y=0x7A10, A=sign |
+| `(0x7A)` | `0xF7DD` | Subtract AR-X and AR-Y mantissas; exponent ignored | `CD 7A` | XH=YH=0x7A | X=0x7A00, Y=0x7A10, A=sign |
 | `(0x7C)` | `0xF6E6` | XOR signs of AR-X and AR-Y; set both signs to positive | `CD 7C` | XH=YH=0x7A | X=0x7A00, Y=0x7A10, A=XOR |
-| `(0x7E)` | `0xF6E6` | Multiply: AR-X = AR-X × AR-Y; overflow → V flag | `CD 7E` | AR-X, AR-Y, XH=YH=0x7A | X=0x7A00, Y=0x7A09, U, AR-W/V/U/Z |
+| `(0x7E)` | `0xF01A` | Multiply: AR-X = AR-X × AR-Y; overflow → V flag | `CD 7E` | AR-X, AR-Y, XH=YH=0x7A | X=0x7A00, Y=0x7A09, U, AR-W/V/U/Z |
 | `(0x80)` | `0xF707` | Copy AR-X → AR-S | `CD 80` | — | X=0x7A08, Y=0x7A38; UH, A preserved |
 | `(0x82)` | `0xF729` | Copy AR-X sign+mantissa → AR-Y | `CD 82` | XH=YH=0x7A | X=0x7A08, Y=0x7A18, U |
 | `(0x96)` | `0xEA78` | Format AR-X for USING output | `CD 96` | AR-X, USING params | X, Y, U, A |
@@ -2379,7 +2382,7 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 |---|---|---|---|---|---|
 | `(0x42)` | `0xCA58` | Return to RUN/input mode; init stacks, clear LCD, show prompt | `CD 42` | — | — |
 | `(0x84)` | `0xEF00` | Disable blinking cursor | `CD 84` | — | (0x787C) bits 0,1 cleared |
-| `(0x88)` | `0xEDF6` | Write bit pattern A to LCD matrix column at X (bits 0–6 shown) | `CD 88` | X→col, A=bits | X=next col, UH=pattern, A |
+| `(0x88)` | `0xEDF6` | Write bit pattern A to LCD matrix column at X (bits 0–6 shown). Bits 0–3 go to (X), bits 4–6 to (X+1) | `CD 88` | X→col, A=bits | X=next col, UH=pattern, A |
 | `(0x8A)` | `0xED5B` | Display ASCII char A at matrix column X; bit 7 selects extended charset | `CD 8A` | X→col, A=char | X+=6, A, U |
 | `(0x8C)` | `0xEE1F` | Compute matrix column address from cursor pointer (0x7875) | `CD 8C` | (0x7875)=0–0x9C | X=col addr, A |
 | `(0x8E)` | `0xEDB1` | Increment cursor pointer (0x7875); clamp at 0x9C; C=1 if clamped | `CD 8E` | — | (0x7875), A=new value, C |
@@ -2395,13 +2398,13 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 | `(0x14)` | `0xDFFA` | Get BASIC program start address (X) and length (U) | `CD 14` | — | X, U, A |
 | `(0x18)` | `0xDF80` | Update memory-map for last processed instruction; if C=1 on entry, set bit 7 in YH | `CD 18` | Y→BASIC, C | X, Y, U, A |
 | `(0x1E)` | `0xFB2A` | PV-Banking control; A bit 0=1 activates banking; updates (0x79D0) | `CD 1E` | A=control | A=0xFE |
-| `(0x3E)` | `0xFB9B` | Trace | `CD 3E` | — | — |
+| `(0x3E)` | `0xFB9D` | Trace | `CD 3E` | — | — |
 | `(0x40)` | `0xC401` | Enter BASIC interpreter | `CD 40` | — | — |
 | `(0x48)` | `0xDCF9` | Return from subroutine; skip inline params via stack-stored distance byte | `CD 48` | stack=return+dist | X, A |
-| `(0x4A)` | `0xDCFD` | Like (0x48) but saves/restores Y | `CD 4C` | stack=return+dist+Y | X, Y, A |
+| `(0x4A)` | `0xDCFD` | Like (0x48) but saves/restores Y | `CD 4A` | stack=return+dist+Y | X, Y, A |
 | `(0x4C)` | `0xDCE9` | Return from subroutine past last inline param | `CD 4C` | stack=return past params | X, A |
 | `(0x4E)` | `0xDCED` | Like (0x4A)+(0x4C): return + restore Y | `CD 4E` | — | X, Y, A |
-| `(0x5A)` | `0xE573` | Timer IC mode select via I/O port (C0/C1/C2 = A bits 3–5) | `CD 5A` | A=mode | U, Y=0xF008, A |
+| `(0x5A)` | `0xE573` | Select the µPD1990AC clock chip's mode through port C (PC3–PC5 = C0–C2 = A bits 3–5): `000` register hold, `001` register shift, `010` time set, `011` time read | `CD 5A` | A=mode | U, Y=0xF008, A |
 | `(0xA0)` | `0xE234` | PV-Banking: activate if (0x79D0) bit 0=1 | `CD A0` | — | Z may change |
 | `(0xA2)` | `0xE655` | Beep toggle (checks 0x786B bit 0); C=1 if beep now OFF | `CD A2` | — | C |
 | `(0xA6)` | `0xE451` | Test BREAK/ON key (bit 1 of 0xF00B); Z=0 if pressed, Z=1 if not pressed | `CD A6` | — | Z |
@@ -2415,8 +2418,8 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 
 | VMJ | Addr | Description | Syntax | Entry | Modified |
 |---|---|---|---|---|---|
-| `(0xD4)` | `0xDEE3` | Set BASIC execution pointer; P1=0xAC=current line, 0xB2=error info | `D4 P1` | Y=BASIC addr | X, U=0x78AC |
-| `(0xD6)` | `0xDED1` | Load Y with new BASIC addr from memory-map area; P1=source area low byte | `D6 P1` | — | X, Y, U, A |
+| `(0xD4)` | `0xDEE3` | Save the position Y (address, line number from `0x789C`, program start from `0x789E`) into a 6-byte slot: P1=`0xA0` previous line, `0xAC` BREAK, `0xB2` ERROR | `D4 P1` | Y=BASIC addr | X, U=0x78A0; Y and C preserved |
+| `(0xD6)` | `0xDED1` | Restore a saved position: Y ← address, and line number/program start → `0x789C`–`0x789F`. P1=`0xA6` search result, `0xAC` BREAK, `0xB8` ON ERROR | `D6 P1` | — | X, Y, U, A |
 | `(0xD8)` | `0xDF3B` | Check if BASIC program running; Z=1 if NOT running | `D8` | — | A |
 | `(0xDA)` | `0xC00E` | Cache variable address from U and length from AR-X to 0x7883–0x7885 | `DA` | U=var addr | A |
 | `(0xDC)` | `0xDEBC` | Load X from AR-X CSI address (7A05:7A06); length/flag → A/UL | `DC` | AR-X=CSI | X, U, A |
@@ -2430,9 +2433,9 @@ AR-X, AR-Y, AR-Z, AR-U, AR-V, AR-W, AR-S are 8-byte BCD float structures at `0x7
 |---|---|---|
 | `(0xA4)` | `0xB888` | Load character from tape |
 | `(0xA8)` | `0xB88B` | Save character to tape |
-| `(0xAA)` | `0xBD3C` | File transfer to/from tape |
+| `(0xAA)` | `0xB88E` | File transfer to/from tape (stub → `JMP 0xBD3C`) |
 | `(0xAE)` | `0xB891` | Compare checksum of received data |
-| `(0xB0)` | `0xBCE8` | Load/receive program header from tape |
+| `(0xB0)` | `0xB894` | Load/receive program header from tape (stub → `JMP 0xBCE8`) |
 | `(0xB6)` | `0xB89D` | Create tape program header |
 | `(0xB8)` | `0xB8A0` | Syntax check cassette "-1" operation; update RMT param (0x7879) |
 
@@ -2465,6 +2468,8 @@ Called via `sjp 0xaddr`. Require XH=YH=0x7A (`vmj(0x54)`) and AR-X (or AR-X+AR-Y
 | `0xF5BE` | INT | AR-X = float | AR-X = integer part (truncated) |
 
 These are Radio Shack's published entry points (*TRS-80 Microcomputer News*, March 1983 and February 1984). Each one matches the BASIC token dispatch table and the routine headers in the ROM disassembly, and all are at the same address in ROM revisions A01, A03 and A04. Two corrections to earlier versions of this table: `0xF161` is **LN** and `0xF165` is **LOG** (they were swapped), and `0xF531` is BASIC `DEG` (d.mmss → decimal degrees), not a degree→radian conversion. Radio Shack notes that the numeric calls work on BCD values only, so convert binary integers first.
+
+**Approximate speed** (operations per second on a stock PC-1500, from Schlieker, *PC-1500 ROM-Unterprogramme*, 1983): SGN 2300 · X+Y 1100 · INT 1100 · X−Y 860 · X×Y 130 · ABS 56 · DMS 56 · 10ˣ 53 · X÷Y 50 · 1/X 50 · SQR 43 · DEG 23 · TAN 14 · EXP 13 · ATN 10 · LOG 9 · LN 8 · SIN 8 · ASN 8 · COS 7 · ACS 7. Transcendental functions cost roughly 100–150 ms each.
 
 ### Published Keyboard, LCD, String and Tape Entry Points
 
