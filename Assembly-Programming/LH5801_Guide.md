@@ -2002,7 +2002,7 @@ On the PC-1600, the start is not set with an absolute address, because the LH580
 
 | Label | Address | Description |
 |---|---|---|
-| `RAM_ST` | `0x7860` | High byte of user-available RAM start |
+| `RAM_ST` | `0x7863` | High byte (page) of user-available RAM start (`&40` stock; `&00` with a 16 KB module). Radio Shack's 1983 map calls it "RAM top" and `0x7864` "RAM bottom" — see `Memory-Architecture/PC-1500-BASIC-Pointers.md` §4 |
 | `BASPRG_ST` | `0x7865` | BASIC program start address |
 | `BASPRG_END` | `0x7867` | BASIC program end address (used by `MEM`) |
 | `BASPRG_EDT` | `0x7869` | Editor work pointer, used during line modification |
@@ -2131,12 +2131,13 @@ ROM entry points (ME1, via `sjp` or called by BASIC):
 
 | Label | Address | Description |
 |---|---|---|
+| `COLDES` | `0xA519` | Change pen color |
 | `PRINT_150` | `0xA781` | Print ASCII character (no LF) |
 | `MOTOFF` | `0xA769` | Printer motor OFF |
 | `MOTDRV` | `0xA8DD` | Motor drive, move pen |
-| `LFEED` | `0xA951` | Line feed |
+| `LFEED` | `0xA9F1` | Send one line feed (LF) to printer |
 | `NLFEED` | `0xAA04` | Send N line feeds to printer |
-| `PENUPDOWN` | `0xAAE3` | Pen up/down |
+| `PENUPDOWN` | `0xAAD9` | Pen up/down (state byte `0x79E9`). `0xAAE3` is a second entry inside the same routine |
 | `GRPHPREP` | `0xABEF` | Switch from text to graphics mode |
 | `TEXT` | `0xACA6` | TEXT mode |
 | `TEXTPREP` | `0xACD3` | Text mode preparation |
@@ -2153,6 +2154,8 @@ ROM entry points (ME1, via `sjp` or called by BASIC):
 | `RMT` | `0xBEF9` | RMT (remote control) |
 | `REMOTEON` | `0xBF11` | Remote ON |
 | `REMOTEOFF` | `0xBF43` | Remote OFF |
+
+`COLDES`, `LFEED` and `PENUPDOWN` come from Radio Shack's published CE-150 entry points (*TRS-80 Microcomputer News*, March 1983). They were checked against the CE-150 ROM image: `0xA9F1` is an `SJP`/`JMP` target 7 times and `0xAAD9` 13 times, while `0xA951` (the earlier `LFEED` value) is never called. The same list also gives `0xABCB` as "switch printer from graphic to text mode", but that address falls inside a `CPI UL,0x04` instruction at `0xABCA`, so it is not a real entry point. Use `TEXT`/`GRAPH` instead.
 
 ### Calling Conventions
 
@@ -2439,22 +2442,119 @@ Called via `sjp 0xaddr`. Require XH=YH=0x7A (`vmj(0x54)`) and AR-X (or AR-X+AR-Y
 
 | Address | Function | Entry | Returns |
 |---|---|---|---|
-| `0xF161` | LOG (base 10) | AR-X = float | AR-X = log₁₀(AR-X) |
-| `0xF165` | LN (natural log) | AR-X = float | AR-X = ln(AR-X) |
+| `0xEFBA` | X + Y | AR-X, AR-Y | AR-X = AR-X + AR-Y (also `vej (F0)`) |
+| `0xEFB6` | X − Y | AR-X, AR-Y | AR-X = AR-X − AR-Y |
+| `0xF01A` | X × Y | AR-X, AR-Y | AR-X = AR-X × AR-Y |
+| `0xF084` | X ÷ Y | AR-X, AR-Y | AR-X = AR-X / AR-Y (also `vmj 0x58`) |
+| `0xF89C` | X ^ Y | AR-X, AR-Y | AR-X = AR-X ^ AR-Y |
+| `0xF0E9` | SQR | AR-X = float | AR-X = √AR-X |
+| `0xF161` | LN (natural log) | AR-X = float | AR-X = ln(AR-X) |
+| `0xF165` | LOG (base 10) | AR-X = float | AR-X = log₁₀(AR-X) |
 | `0xF1CB` | EXP (eˣ) | AR-X = float | AR-X = e^AR-X |
-| `0xF1D4` | — (not documented) | — | — |
+| `0xF1D4` | 10ˣ | AR-X = float | AR-X = 10^AR-X |
 | `0xF391` | COS | AR-X = angle | AR-X = cos(AR-X) |
 | `0xF39E` | TAN | AR-X = angle | AR-X = tan(AR-X) |
 | `0xF3A2` | SIN | AR-X = angle | AR-X = sin(AR-X) |
 | `0xF492` | ACS (arccos) | AR-X = value | AR-X = arccos(AR-X) |
 | `0xF496` | ATN (arctan) | AR-X = value | AR-X = arctan(AR-X) |
 | `0xF49A` | ASN (arcsin) | AR-X = value | AR-X = arcsin(AR-X) |
-| `0xF531` | DEG→RAD | AR-X = degrees | AR-X = radians |
-| `0xF564` | DMS | AR-X = decimal degrees | AR-X = degrees/minutes/seconds |
+| `0xF531` | DEG | AR-X = d.mmss | AR-X = decimal degrees (BASIC `DEG`) |
+| `0xF564` | DMS | AR-X = decimal degrees | AR-X = d.mmss (BASIC `DMS`) |
+| `0xF597` | ABS | AR-X = float | AR-X = \|AR-X\| |
 | `0xF59D` | SGN | AR-X = float | AR-X = sign: +1, 0, or −1 |
 | `0xF5BE` | INT | AR-X = float | AR-X = integer part (truncated) |
-| `0xEFB6` | — (not documented) | — | — |
-| `0xF0E9` | — (not documented) | — | — |
+
+These are Radio Shack's published entry points (*TRS-80 Microcomputer News*, March 1983 and February 1984). Each one matches the BASIC token dispatch table and the routine headers in the ROM disassembly, and all are at the same address in ROM revisions A01, A03 and A04. Two corrections to earlier versions of this table: `0xF161` is **LN** and `0xF165` is **LOG** (they were swapped), and `0xF531` is BASIC `DEG` (d.mmss → decimal degrees), not a degree→radian conversion. Radio Shack notes that the numeric calls work on BCD values only, so convert binary integers first.
+
+### Published Keyboard, LCD, String and Tape Entry Points
+
+Radio Shack published these entry points for the PC-2 (its rebadged PC-1500) in Bruce Elliott's series "PC-2 Assembly Language" (*TRS-80 Microcomputer News*, March 1983 – February 1984). Radio Shack presented them as the entry points guaranteed to stay fixed across ROM revisions. Every system-ROM address below matches a routine header in the ROM disassembly and is the same in revisions A01, A03 and A04. The CE-150 addresses were checked against the CE-150 ROM image. The author says he had not tested the entry/exit conditions himself, so treat any condition marked *(article)* as unverified until you have run it.
+
+#### Keyboard
+
+| Address | Function | Entry | Exit |
+|---|---|---|---|
+| `0xE243` | Wait for a key (`WAIT_4_KB`) | — | C=0: A = key code. C=1: BREAK was pressed and A=`0x0E`. SHIFT, DEF and SML only change modes and do not return. Auto power-off after about 7 min idle; pressing ON resumes the scan. After a BREAK, clear the interrupt flag with `ani #(0xF00B),0xFD` (`FD E9 F0 0B FD`) *(article)* |
+| `0xE42C` | Scan once, no wait (`KEY_2_ASCII`) | — | A = key code, or `0x00` if no key is down (the code path ends `ldi a,0x00`/`rtn`) |
+| `0xE33F` | Auto power-off routine | — | — |
+
+**Key codes** returned by `0xE243`/`0xE42C` (row = low nibble, column = high nibble). Codes `0x20`–`0x7A` follow ASCII. The table shows only the non-ASCII codes:
+
+| Code | Key | Code | Key | Code | Key |
+|---|---|---|---|---|---|
+| `0x01` | (SHIFT) | `0x0D` | ENTER | `0x18` | CL |
+| `0x02` | (SML) | `0x0E` | BREAK | `0x19` | RCL |
+| `0x08` | ← | `0x0F` | OFF | `0x1A` | CA |
+| `0x09` | ⇕ | `0x11`–`0x16` | F1–F6 | `0x1B` | (DEF) |
+| `0x0A` | ↓ | `0x1C` | INS | `0x1D` | DEL |
+| `0x0B` | ↑ | `0x1F` | MODE | `0x5B` | √ (printed "rad") |
+| `0x0C` | → | `0x5D` | π | `0x5E` | ^ |
+
+Keys in parentheses are mode keys that `0xE243` swallows rather than returns.
+
+#### LCD
+
+The **cursor pointer** is `0x7875` and counts in graphic columns (`0x00`–`0x9B`, 156 columns). Characters are 6 columns wide, so a text cursor advances by 6 and graphics advance by 1. If you change `0x7875` and then return to BASIC, also set bit 0 of `0x7874` (`ori (0x7874),0x01`), as BASIC's `CURSOR`/`GCURSOR` do. To reset from machine code, use `ani (0x7874),0xFE` and then write `0x00` to `0x7875` *(article)*.
+
+| Address | Function | Entry | Exit |
+|---|---|---|---|
+| `0xED57` | Put one character at the cursor | A = ASCII | Cursor unchanged. C=0: cursor in `0x00`–`0x95`. C=1: cursor at `0x96` (last cell) |
+| `0xED4D` | Put one character and advance | A = ASCII | Cursor +6 if it was < `0x96`, otherwise wraps to `0x00` |
+| `0xED00` | Print n characters at the cursor (`vmj 0x92`) | U = address, A = count (`0x01`–`0x1A`) | Cursor updated. C=1 if the string reached column 26 or overflowed. Text past the 156th dot is dropped |
+| `0xED3B` | Print n characters from cursor 0 | U = address, XL = count (`0x01`–`0x1A`) | C=0: fitted in ≤ 25 cells. C=1: reached or passed the 26th |
+| `0xEDEF` | Write one graphic column at the cursor | A = bit pattern | Cursor unchanged. A, X, U may change. Y preserved |
+| `0xE8CA` | Display the 80-byte buffer `0x7BB0`–`0x7BFF` | Buffer ends with `0x0D` (≤ 79 chars). Y = cursor within buffer. `0x7880` selects the mode (below) | — |
+
+`0x7880` (DISPARAM) modes for `0xE8CA`: `0x40` shows the buffer with Y as cursor. If the text is > 26 chars, it shows the character at Y and the 25 before it. `0x00` shows the first 26 characters and ignores Y. `0x20` shows the number in AR-X (`0x7A00`–`0x7A07`) *(article)*.
+
+**Annunciators** are the two bytes after the LCD matrix in display chip 1/3 (`0x7600`–`0x764D` is the matrix itself). The ROM tests RUN mode with `bii (0x764F),0x40` and sets BUSY with `ori (0x764E),0x01`:
+
+| Byte | b7 | b6 | b5 | b4 | b3 | b2 | b1 | b0 |
+|---|---|---|---|---|---|---|---|---|
+| `0x764E` | DEF | I | II | III | SMALL | (katakana) | SHIFT | BUSY |
+| `0x764F` | — | RUN | PRO | RESERVE | — | RAD | G | DE |
+
+`0x774E`–`0x774F` (the matching bytes in chip 2/4) are unused.
+
+#### Conversions, comparisons, program search
+
+| Address | Function | Entry | Exit |
+|---|---|---|---|
+| `0xED95` | Two ASCII hex digits (`0-9`,`A-F`) → one byte | X → first digit | A = byte. X += 2. U, Y unchanged |
+| `0xD0D2` | Compare two BCD numbers (AR-X vs AR-Y) | A = comparison operator | per ROM |
+| `0xD0F9` | Compare two strings | A = comparison operator | per ROM |
+| `0xD2EA` | Search for a program line number | U = line number | per ROM |
+| `0xD461` | Find the address of a variable (`vmj 0x0E`) | see VMJ table | |
+
+#### String functions
+
+These all work on CSI (character string information) in AR-X/AR-Y (see *Arithmetic Register Format*) and build their result in the string buffer `0x7B10`. Set the string-buffer pointer `0x7894` to `0x10` first. On return UH = error code (`0x00` = OK).
+
+| Address | Function | Entry | Exit |
+|---|---|---|---|
+| `0xD9DD` | ASC / LEN | CSI in AR-X. YL = `0x60` (ASC) or `0x64` (LEN) | Result in AR-X |
+| `0xD9B1` | CHR$ | `0x7A07` = code 0–255 | `0x7B10` = character. `0x7A04`–`0x7A06` = `C1 7B 10`. `0x7A07` = `0x00` if the code was 0, else `0x01` |
+| `0xD9D7` | VAL | CSI in AR-X | Number in AR-X |
+| `0xD9CF` | STR$ | Number in AR-X | CSI in AR-X, text at `0x7B10` |
+| `0xD9F3` | RIGHT$ / LEFT$ / MID$ | YL = `0x02` (RIGHT$) / `0x7A` (LEFT$) / `0x7B` (MID$). `(0x7890)` = `(0x7891)` − 8 (MID$: − 16). `(0x7892)` = `(0x7890)` + 8 (MID$: + 16). X$'s CSI at `(0x7890)`…+7, and for MID$ the Y argument at `(0x7890)`+8…+15. AR-X = Y (RIGHT$/LEFT$) or Z (MID$). Do not alter `0x7890`/`0x7891` *(article)* | CSI in AR-X, text at `0x7B10` |
+| `0xD925` | Concatenate | first CSI in AR-X, second in AR-Y (`0x7A10`) | CSI in AR-X, text at `0x7B10` |
+
+#### Cassette (CE-150 ROM)
+
+The flag byte is `0x7879` (`CASS_FLAG`). Bit 7 selects direction: 0 = output/close input, 1 = input. Bit 6 selects 0 = load, 1 = verify. Bit 4 selects the remote: 0 = REMOTE 0, 1 = REMOTE 1. Bit 0 of `0x786B` enables the beep during tape I/O (BASIC `BEEP ON/OFF`). The printer's paper feed is inhibited while tape I/O is active.
+
+| Address | Function | Entry | Exit |
+|---|---|---|---|
+| `0xBF11` | Motor on | `0x7879` bits 7/4 | — |
+| `0xBF43` | Motor off | — | REMOTE 0 always off. REMOTE 1 follows `RMT ON/OFF` |
+| `0xBBD6` | Build the 40-byte header image at `0x7B60`–`0x7B87` | A = file mode (`00` machine code, `01` program, `02` reserve, `04` data) | Sync bytes at `0x7B60`–`0x7B67`, mode at `0x7B68`, `0x7B69`–`0x7B87` zeroed |
+| `0xBCE8` | Write the header (bit 7 = 0) / read it and search for a name (bit 7 = 1) | Header built. Optional filename at `0x7B69`–`0x7B78` (all zero = take the first file) | Read: header image at `0x7B88`–`0x7BAF`. C=1 on BREAK |
+| `0xBD3C` | Write/read file data | X = start, U = byte count − 1 | Write: 2 checksum bytes per 80 data bytes (not counted in U). Read: X = last byte + 1. C=1 means abnormal end: if H=1 BREAK was pressed. If H=0, V=1 is a verify mismatch and V=0 a checksum error |
+| `0xBDCC` | Write one byte | A = byte. Header must already be written | — |
+| `0xBDF0` | Read one byte | — | A = byte. C=1 on BREAK |
+| `0xBBF5` | End tape I/O | `0x7879` bit 7 = 0 to end output, 1 to end input | Serial port reset, paper feed re-enabled, motors off |
+
+The header image in RAM matches the on-tape layout in `Data-Formats/PC-1500-Tape-Format.md`. The output copy starts at `0x7B60` and the input copy at `0x7B88` (+`0x28`), so on input the filename is at `0x7B91`–`0x7BA0`, the start address at `0x7BAA`, and the byte count − 1 at `0x7BAC`. The CE-150 ROM's own `CSAVE` reads `0x7B82` (start) and `0x7B84` (length − 1). The article's "`0x7B85`–`0x7B86`" for the output length is one byte off.
 
 ---
 

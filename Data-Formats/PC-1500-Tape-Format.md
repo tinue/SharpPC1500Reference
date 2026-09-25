@@ -142,6 +142,8 @@ Checksum bytes are read with `ReadByteFromWav` (not `ReadByteSumFromWav`) and th
 
 After reading all 40 header bytes the block counter reaches 80, triggering the first 2-byte checksum.
 
+**The header in RAM.** The CE-150 ROM builds the outgoing header in RAM at `&7B60`–`&7B87` (byte index *n* is at `&7B60`+*n*: sync `&7B60`, sub-type `&7B68`, filename `&7B69`, start `&7B82`, length − 1 `&7B84`, entry `&7B86`). A header read from tape lands `&28` bytes higher, at `&7B88`–`&7BAF` (filename `&7B91`, start `&7BAA`, length − 1 `&7BAC`). The start and length addresses come from the CE-150 ROM's own `CSAVE`/`CLOAD` code. **Open question:** Radio Shack's article says this field holds the byte count *minus one*, and `CSAVE` passes it straight to the file-transfer routine as U, which the article also documents as count − 1. The decoder steps above read `dataLength` bytes. If the article is right, that is one byte short (for a BASIC file, the missing byte is probably the final `&FF` end marker). This has not yet been checked against a real recording. The ROM calls that build, write and read the header are listed in `Assembly-Programming/LH5801_Guide.md` → *Published Keyboard, LCD, String and Tape Entry Points*.
+
 **Full ident word** (formed after reading sub-type):
 ```
 ident = (0x0A << 4) | (subtype & 0x0F)
