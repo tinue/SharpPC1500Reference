@@ -65,8 +65,8 @@ There is no dedicated bank-select address register on the connector for any regi
 | 12 | VCC | Power |
 | 13 | NC | Not connected |
 | 14 | NC | Not connected |
-| 15 | **PV** | Chip select |
-| 16 | **PU** | Chip select |
+| 15 | **PV** | Chip select (as printed; probably swapped with 16, see §2.2b) |
+| 16 | **PU** | Chip select (as printed; probably swapped with 15, see §2.2b) |
 | 17–24 | D7–D0 | Data bus |
 | 25 | INHIBIT | Prohibits ROM select of the PC-1500, when connected to GND |
 | 26 | WEX | External WAIT signal |
@@ -117,7 +117,7 @@ The PC-1600's 60-pin system bus connector (§4.0 below) is a documented match in
 - Pin 56: DME0 — identical signal, same pin, on both.
 
 **Divergences** (real architectural differences between the LH5801-based PC-1500 and the Z-80/LH5803-based PC-1600, not transcription errors — the PC-1600 replaces the PC-1500's direct PU/PV CPU flipflops with a gate-array-buffered PT/PU/PVOUT triple, and its Z-80 core has separate RD/WR/IORQ/MREQ/INT/M1 lines where the LH5801 has a single R/W and a single INT):
-- Pins 15–16: PC-1500 has PV then PU; PC-1600 has PU then PVOUT — the bank-select signals are present on both but in reversed pin order and with PV replaced by the gate-array's PVOUT.
+- Pins 15–16: PC-1500 TRM has PV then PU; PC-1600 TRM has PU then PVOUT. **This one is probably not a real difference but a documentation error — unresolved, see §2.2b.**
 - Pins 9–10, 13–14: PC-1500 has PB0/PC7 (unused)/NC/NC; PC-1600 has INT1̄/M1̄/RSTE/PT — the PC-1600 uses this range for Z-80-specific control and the sub-CPU's PT bank-select bit.
 - Pins 26, 28, 30: PC-1500 WEX/W1/INT vs. PC-1600 IORQ/WAIT/IRQ — both pairs are WAIT- and interrupt-related, but the PC-1600 versions are genuine Z-80 bus signals rather than the PC-1500's simpler external-WAIT/interrupt lines.
 - Pins 39, 42: PC-1500 has PB1 (unused)/VCC; PC-1600 has VGG/NC.
@@ -125,7 +125,29 @@ The PC-1600's 60-pin system bus connector (§4.0 below) is a documented match in
 - Pin 55: GND (PC-1500) vs. NC (PC-1600).
 - Pins 57–60: PC-1500 has R/W, DME1, ME1, OD; PC-1600 has WR̄, ELH̄, IOE, RD̄ — the PC-1500's single-strobe LH5801 read/write and second-bank chip-select signals are replaced by the Z-80's split RD̄/WR̄ strobes and the PC-1600-specific ELH̄/IOE lines.
 
-**Net assessment:** the two scans agree exactly, pin-for-pin, on every signal common to both CPU architectures (address bus, data bus, INHIBIT/INH, CMTIN/CMTOUT, VCC/GND placement, BFO/φOS, DME0) — strong evidence neither transcription has a shifted or misread pin in those ranges. The divergences are concentrated exactly where the two machines' CPUs and bus protocols genuinely differ (bank-select signal set, interrupt/WAIT signals, read/write strobes, ground/battery pin counts), which is what a real hardware difference should look like rather than an OCR error. The one place worth double-checking against a second PC-1500 TRM scan if one surfaces: pins 15–16 (PV/PU order) and 43–49 (F-GND/VBAT run), since those are the only divergent regions where a plausible alternative reading (e.g. an accidentally swapped row) would still land on named signals rather than obvious garbage.
+**Net assessment:** the two scans agree exactly, pin-for-pin, on every signal common to both CPU architectures (address bus, data bus, INHIBIT/INH, CMTIN/CMTOUT, VCC/GND placement, BFO/φOS, DME0) — strong evidence neither transcription has a shifted or misread pin in those ranges. The divergences are concentrated exactly where the two machines' CPUs and bus protocols genuinely differ (bank-select signal set, interrupt/WAIT signals, read/write strobes, ground/battery pin counts), which is what a real hardware difference should look like rather than an OCR error. The one place worth double-checking against a second PC-1500 TRM scan if one surfaces: pins 43–49 (F-GND/VBAT run), a divergent region where a plausible alternative reading (e.g. an accidentally swapped row) would still land on named signals rather than obvious garbage. Pins 15–16 turned out to be a real contradiction between the two manuals, not a reading error: §2.2b.
+
+#### 2.2b Open: which of pins 15/16 carries PV?
+
+The two manuals contradict each other, and both can't describe the same wiring:
+
+| Source | Pin 15 | Pin 16 |
+|---|---|---|
+| PC-1500 TRM §4-3-2 (PDF p.108, printed p.103) | PV | PU |
+| PC-1600 TRM §10.3(1) | PU | PVOUT |
+| PC-1600 Service Manual, CN-9 system-bus table | PU | PVOUT |
+
+- **The PC-1500 reading is what Sharp printed.** Checked on the rendered scan, not just the OCR text: 15 = PV, 16 = PU.
+- **The PC-1600 side is confirmed twice, and it's deliberate.** The Service Manual §5-3 says: "The PV signal of the LH-5803 is directly sent by PVOUT of the SC7852". Its memory map puts the CE-150 ROM at PVOUT = 0 and the CE-158 ROM at PVOUT = 1. So on the PC-1600, pin 16 carries the PC-1500 firmware's PV.
+- **Why it matters:** the CE-150 gates its ROM on PV. The CE-158 gates its ROM on PV **and** switches its two 8 KB halves on PU (`PU-PV-Signals.md` §5). If the PC-1500 really had PV on pin 15, a CE-158 plugged into a PC-1600 would take the Z-80's Port 31H PU bit as its enable and the LH5803's PV as its bank bit. Its ROM switching would break. Sharp sold the CE-150 and CE-158 as working on the PC-1600.
+- **Likely verdict: the PC-1500 TRM table has 15 and 16 swapped.** This is a deduction, not a measurement. No online source (manuals sites, PC-1500.info, the HP Museum forum) documents such an erratum.
+- **Sources that don't settle it:**
+  - The PC-1500 Service Manual schematic is a 90 dpi scan and can't be read.
+  - The Radio Shack PC-2 Service Manual (pc1500.com) has a legible schematic, but its 60-pin legend lists PU and PV without contact numbers. Its main-PCB artwork labels each connector pad, but the labels at contacts 15/16 are illegible ("P?0"/"P?1").
+  - The CE-150 Service Manual's PCB artwork names the same two edge contacts "PU0" and "PU1".
+  - The CE-158 Service Manual (ManualsLib, image-only) was not readable online.
+- **Separate open point, PC-1600 PU:** the SC7852's pin table has a PVIN input for the LH5803's PV, but no input for the LH5803's PU. The SC7852's PU output is a Port 31H bank bit. So it's unclear what reaches a CE-158's PU contact while the LH5803 runs. The Service Manual's note on SC7852 pin 92 (LHNMIO) reads, in poor OCR, "goes high when the LH-5803 is 94**H and when PU = PV is high (CE-158 internal ROM)". That suggests the gate array handles the CE-158 case, but it doesn't say how.
+- **How to settle it:** get a readable trace from LH5801 pin 60 (PV) to the connector on a sharper PC-1500/PC-2 main-PCB scan, or do a continuity check on a real PC-1500. A readable CE-158 schematic with contact numbers would also do.
 
 ---
 
@@ -190,7 +212,7 @@ The PC-1600 has three expansion connectors in total: a 60-pin system bus connect
 | 14 | PT | 29 | CMTOUT | 44 | FG | 59 | IOE |
 | 15 | PU | 30 | IRQ | 45 | VBAT | 60 | RD̄ |
 
-This is a different, larger connector than the two memory slots — it exposes Z-80 control signals (M1̄, INT1̄, IORQ, WAIT, IRQ) that the memory slots don't, plus cassette I/O (CMTIN/CMTOUT), battery-backup (VBAT), and the sub-CPU timing signals (BFO, φOS) that never appear on a memory-only connector. PT and PU (pins 14, 15) appear here too, confirming they're broadcast machine-wide, not slot-specific.
+This is a different, larger connector than the two memory slots — it exposes Z-80 control signals (M1̄, INT1̄, IORQ, WAIT, IRQ) that the memory slots don't, plus cassette I/O (CMTIN/CMTOUT), battery-backup (VBAT), and the sub-CPU timing signals (BFO, φOS) that never appear on a memory-only connector. PT and PU (pins 14, 15) appear here too, confirming they're broadcast machine-wide, not slot-specific. Pin 16 (PVOUT) carries the LH5803's PV in PC-1500 mode; the PC-1500 TRM puts PV on pin 15 instead (§2.2b).
 
 ### 4.1 Memory Slot 1 (S1) Connector, per TRM §10.3
 
