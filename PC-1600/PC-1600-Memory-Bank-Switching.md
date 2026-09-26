@@ -579,7 +579,7 @@ Since only vertical bank 0 can hold program/expansion memory (Part 2), Modes B-D
 - **Program memory** (`"P"`, and the *n* KB named in `"P",n`) is a *separate resident program store* -- `TITLE`-named, cleared with `NEW 0`. It is CPU-addressable when active but never shows in `MEM`: plain `INIT "S2:","P"` leaves `MEM` unchanged. The manual notes this area is internally structured exactly like §3's internal RAM -- an 8-byte header + a 189-byte "Reserve Program Area" + the "BASIC text area" (the tokenised program lines) -- but only "program memory" matters at the `INIT` level; the sub-region names don't affect the partitioning.
 - Persistence differs too: program-memory and RAM-file contents live in the module SRAM and survive a CR2032 swap; expansion-memory bookkeeping lives in main-unit RAM and does not.
 
-Changing an already-initialized module's mode requires clearing it first (`KILL` every file, or `TITLE "S2:" ENTER NEW 0 ENTER` to clear program memory / `TITLE ENTER NEW ENTER` to clear expansion memory) -- the manual is explicit that the mode can't be changed with live data present.
+Changing an already-initialized module's mode requires clearing it first (`KILL` every file, or `TITLE "S2:" ENTER NEW 0 ENTER` to clear program memory / `TITLE ENTER NEW ENTER` to clear expansion memory) -- the manual is explicit that the mode can't be changed with live data present. (A bare `TITLE`, as used here, is identical to `TITLE "S0:"` (ROM handler and real hardware) even though the Operation Manual lists only `TITLE "S0:"/"S1:"/"S2:"/?`; see `PC-1600-Memory-Architecture.md` §4.1. `INIT` also refuses a program module currently selected with `TITLE`.)
 
 ### Write Protect and Battery Notes
 

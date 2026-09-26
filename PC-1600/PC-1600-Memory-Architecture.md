@@ -6,7 +6,7 @@ This document is the narrative/comparison layer for the PC-1600's memory system:
 
 For the exhaustive mechanism-level reference (Port 31H truth tables per address range, the LR38041 gate array's pin-by-pin function, firmware bank-call routines, module header formats, and real module hardware including the CE-1600M/CE-1601M/*superRAM*), see `PC-1600-Memory-Bank-Switching.md` — this document draws on it throughout rather than repeating it. For the PC-1500/1500A's own decoder architecture, see `PC-1500-Address-Decoding.md`. For raw connector pinouts across all three machines, see `Expansion-Connectors.md`.
 
-**Sources for this document specifically:** the PC-1600 Technical Reference Manual §2.1 ("Memory Map"), the paragraph introducing 8 memory banks and internal-RAM layout that follows it, §2.2 ("BASIC Commands Related to Machine Language"), **§3.12** ("Memory": 3.12.1 Slots and Memory Modules, 3.12.2 Work Area used for Memory, 3.12.3 IOCS routines) and **§3.13** ("Memory Module": location / type / header) — the TRM figures behind §2–§4b, not previously transcribed into this project's PC-1600 material — plus **§5.15** and the Operation Manual Appendices **F** (error codes) and **H** (PC-1500 compatibility) for §8. Cross-checked against the existing Service-Manual-sourced content in `PC-1600-Memory-Bank-Switching.md`, and against the PC-1600's own German-language user manual (*Bedienungsanleitung*), whose Appendix D (memory map, in German) and Appendix E/H (machine-language commands, PC-1500 compatibility) independently confirm most of the TRM material and correct several claims this document made in earlier revisions — noted inline where that happened.
+**Sources for this document specifically:** the PC-1600 Technical Reference Manual §2.1 ("Memory Map"), the paragraph introducing 8 memory banks and internal-RAM layout that follows it, §2.2 ("BASIC Commands Related to Machine Language"), **§3.12** ("Memory": 3.12.1 Slots and Memory Modules, 3.12.2 Work Area used for Memory, 3.12.3 IOCS routines) and **§3.13** ("Memory Module": location / type / header) — the TRM figures behind §2–§4b, not previously transcribed into this project's PC-1600 material — plus **§5.15** and the Operation Manual Appendices **F** (error codes) and **H** (PC-1500 compatibility) for §8, and the Operation Manual's command-dictionary entries for `NEW` (p.233–235), `TITLE` (p.317), `INIT` (p.185–186), `PASS` (p.252) and its **Appendix B** ("Replacing the RAM Modules", p.333) for §4.1. Cross-checked against the existing Service-Manual-sourced content in `PC-1600-Memory-Bank-Switching.md`, and against the PC-1600's own German-language user manual (*Bedienungsanleitung*), whose Appendix D (memory map, in German) and Appendix E/H (machine-language commands, PC-1500 compatibility) independently confirm most of the TRM material and correct several claims this document made in earlier revisions — noted inline where that happened.
 
 ---
 
@@ -119,6 +119,33 @@ Two things worth noting:
 
 This C5H-offset convention is identical in spirit to the PC-1500/1500A's own module-`NEW`-offset practice (`PC-1500-Address-Decoding.md` §5.4, §5.5) — allocate the fixed reserve first, then give BASIC/ML the rest — just generalized here to name which of three physical targets (S0/S1/S2) the reserve applies to, since the PC-1600 (unlike the PC-1500/1500A) has two independent module slots plus internal RAM, all needing this same bookkeeping simultaneously.
 
+### 4.1 Program areas, `TITLE`, and what each `NEW` form clears
+
+Each of S0/S1/S2 is a separate **program area**: its own header + reserve, optional ML area, and one BASIC program (`INIT` "P": *"A single program can be written to the module"*). Operation Manual Appendix B: *"Until specified with the TITLE command, program modules are independent of the internal user RAM when installed."*
+
+**`TITLE` selects the current program area** (Operation Manual p.317). Documented forms: `TITLE "S0:"` (internal RAM — the default after ALL RESET), `TITLE "S1:"`, `TITLE "S2:"`, and `TITLE ?`, which returns 0/1/2. The selection is the byte at F1D5H (`PC-1600-Work-Area-Map.md` §3.12). Selecting a slot that doesn't hold a program module gives **ERROR 101** (confirmed on real hardware with no program areas defined: `TITLE "S1:"`/`"S2:"` → ERROR 101, `TITLE "S0:"` works).
+
+**A bare `TITLE` is identical to `TITLE "S0:"`**, although the manual doesn't list that form (the CE-1601M manual uses it: `TITLE` ⏎ `NEW` ⏎). The handler in the hidden BASIC ROM (`rom3b.asm`, 4264H) reads the character after the keyword: `?` prints `(F1D5H)+'0'`; end of line (0DH) jumps straight to 1F30H; otherwise it parses the `"Sn:"` device and calls the common routine 1EEFH with A = n. In 1EEFH, A = 0 branches to that same 1F30H (`XOR A` / `LD (F1D5H),A`, then set up S0's program bounds), and A = 1/2 checks the slot's module type and exits with A = 65H (= 101) when it isn't a program module. So bare `TITLE` and `TITLE "S0:"` run the same code. It is accepted without error on real hardware.
+
+**What the `NEW` forms do** (Operation Manual p.233–234, MODE 0):
+
+| Form | Area affected | ML allocation |
+|---|---|---|
+| `NEW` | the `TITLE`-selected area | kept at the previous value |
+| `NEW "Sn:"` | the named area, regardless of `TITLE` | kept |
+| `NEW "Sn:",<address>` | the named area | upper bound set to `<address>` (relative to the area base; lower bound 197) |
+| `NEW 0` | the `TITLE`-selected area | reset to 0 — BASIC starts at 197 |
+
+The manual says `NEW` "clears all BASIC and machine programs", but **real-hardware testing shows `NEW` clears only the BASIC program; an ML area reserved earlier with `NEW …,&xxx` keeps its allocation *and its contents* intact.** Read the manual's "machine programs" as "the ML area is no longer yours to rely on", not as the bytes being erased. So plain `NEW` and `NEW 0` are *not* equivalent: only `NEW 0` gives the ML area back to BASIC.
+
+**Related restrictions:**
+
+- `INIT "Sn:",…` (p.185–186, MODE 0 only) refuses a module that already holds programs or files (clear with `KILL`, or `NEW` on that module), a write-protected module, or **a program module currently selected with `TITLE`**. A CE-159 must be all program memory or all expansion memory.
+- `PASS` (p.252) protects *all* programs in memory and, while set, blocks `NEW`, `TITLE`, `LIST`, `(C)SAVE`, `(C)LOAD`, `MERGE` and `CHAIN` — so the current program area is frozen as well.
+- Installing an *expansion* (non-backed-up) module brings up `NEW 0?: CHECK`; a program module doesn't (Appendix B).
+
+**Open:** whether `MEM` reports the free space of the S1/S2 area when `TITLE` selects it. The manuals only describe `MEM` as "free user memory" (Appendix B).
+
 ---
 
 ## 4a. Program Memory, Expansion Memory, and the RAM File: the Firmware's Central Distinctions
@@ -176,7 +203,7 @@ TRM §3.12.1's own footnote: *"Even when a memory module is installed in S1 or S
 
 ### 4b.3 No `NEW` executed yet — the default BASIC-area structure
 
-`NEW` with no machine-language reservation (equivalently `NEW 0`, or power-on default) leaves the **Machine Program Area empty**: BASIC's program-text pointer sits directly on top of the 197-byte reserve, at `[RAM start] + C5H`. What `[RAM start]` *is* depends on the modules:
+With no machine-language reservation (after `NEW 0` or the power-on default — plain `NEW` keeps any earlier reservation, §4.1) the **Machine Program Area is empty**: BASIC's program-text pointer sits directly on top of the 197-byte reserve, at `[RAM start] + C5H`. What `[RAM start]` *is* depends on the modules:
 
 **(a) Bare machine, no modules** — `[RAM start]` = C000H (internal RAM base).
 
@@ -249,6 +276,8 @@ Three independent fixed ML blocks (one per base + C5H); the BASIC program/variab
 
 When several regions are joined, the OS records — in `S0MTb` (F02AH), `S1MTb`/`S1MBb` (F016H/F018H), `S2MTb`/`S2MBb` (F020H/F022H) and the `ADTBL+1…ADTBL+5` byte table (F1D6H–F1DAH, bank number in bits 4–5) — **the order in which the BASIC program is laid down across the banks**. TRM §3.12.2 Example 1 (CE-159 S1 + CE-1600M S2 as *extension* memory): program fills **bank 0 → bank 2 → bank 3 → main memory** in that order; `S1MTb`/`S2MTb` = FEH ("not a program module — used as extension memory"), `ADTBL+3…+5` = 01H/22H/32H (bank 0, bank 2, bank 3). Example 2 (CE-1600M S1 + CE-161 S2 as *program* modules): `S1MTb`/`S1MBb` = 02H/03H (S1 spans ADTBL+2..+3), `S2MTb` = 04H, load order S0 → S1 → S2. The takeaway: "one contiguous user area" is a firmware abstraction over an explicit, recorded bank sequence — the program text really is scattered across banks 0/2/3/main and the ADTBL list is the map.
 
+**Open discrepancy — fill order.** The Operation Manual, Appendix B, states the opposite slot order for expansion memory: *"BASIC text is written into expansion memory areas in the order S2: → S1: → Internal RAM."* TRM Example 1 (and its `ADTBL` values 01H/22H/32H) puts S1 (bank 0) first. Not yet settled by ROM code or a hardware test.
+
 The `ADTBL+n` byte-level encoding (`bank = (b>>4)&3`, low nibble = slot, bit 7 = program-module leading bank), and a step-by-step reconstruction of where each tokenised byte lands — for an emulator that injects a program image directly instead of running `LOAD` — are in `PC-1600-Work-Area-Map.md` §4 and `PC-1600-BASIC-Program-Placement.md`.
 
 ### 4b.6 LH5803 view of the same configurations
@@ -284,7 +313,7 @@ Two genuine CE-1600Ms (32 KB each, flat, two-bank, no vertical banking) + the in
 
 **This is the ceiling.** Both slot contributions are already at their architectural cap (Slot 1: only Bank 0 + Bank 1 exist for its window; Slot 2: only vertical bank 0 can be S0 expansion memory — and a CE-1600M *is* exactly one 32 KB vertical bank). A CE-1601M / CE-1650M / *superRAM* in Slot 2 keeps `MEM` at this same figure and adds its extra vertical banks **only as RAM-disk space** (`PC-1600-Memory-Bank-Switching.md` Part 2, "Why Slot 1 and Slot 2 contribute so differently"). The one untapped reserve anywhere is Bank 7 ("addressable but unused", §2) — no module uses it.
 
-**Machine-language areas in this configuration.** `NEW "S0:"`, `NEW "S1:"` and `NEW "S2:"` are three independent targets that **accumulate** — issuing them in sequence leaves all three ML areas reserved; only the BASIC program text is cleared by each `NEW` (TRM §2.2's own example does exactly this). Each carves `[base]+C5H … [base]+<expr>−1` from the bottom of its region (`<expr>` = program size + `&C5` = size + 197):
+**Machine-language areas in this configuration.** `NEW "S0:"`, `NEW "S1:"` and `NEW "S2:"` are three independent targets that **accumulate** — issuing them in sequence leaves all three ML areas reserved; only the BASIC program text is cleared by each `NEW` (TRM §2.2's own example does exactly this; confirmed on real hardware — the ML contents survive, §4.1). Each carves `[base]+C5H … [base]+<expr>−1` from the bottom of its region (`<expr>` = program size + `&C5` = size + 197):
 
 | `NEW` | Base | ML area | Max one contiguous block |
 |---|---|---|---|

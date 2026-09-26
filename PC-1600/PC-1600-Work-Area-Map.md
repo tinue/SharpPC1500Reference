@@ -417,7 +417,7 @@ A layout — Appendix 7 gives it real content:
 | F1BFH | "ROM-bit" for the peripheral token table; b7 of F1C0H | PC-1500 token table |
 | F1C1H–F1CEH | **logical banks**: `CURRENT`, `SEARCH START`, `SEARCH FOUND`, `MERGED`, `PREVIOUS I`, `PREVIOUS II`, `BREAK I`, `BREAK II`, `ERROR I`, `ERROR II`, `ON ERROR I`, `ON ERROR II`, `RESTORE`, `INTERPRET` (one byte each, in that order) |
 | F1CFH–F1D4H | BASIC interrupts — `STOP`/`ON` state, request-pending flags |
-| F1D5H | `TITLE` — currently selected program area: 0 = S0 (internal), 1 = S1, 2 = S2 |
+| F1D5H | `TITLE` — currently selected program area: 0 = S0 (internal), 1 = S1, 2 = S2; the value `TITLE ?` returns (`PC-1600-Memory-Architecture.md` §4.1) |
 | F1D6H–F1DAH | one info byte per logical bank — b7: program/AEIM module; b5–b4: physical port address (value for port 31H); b1: slot 2; b0: slot 1 — this is `ADTBL+1`…`ADTBL+5`, see §4 below |
 | F1DBH–F21CH | BASIC stack II |
 
