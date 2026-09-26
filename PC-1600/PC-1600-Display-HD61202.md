@@ -383,11 +383,11 @@ that way and write them back one page further on (`8ABAH`).
 
 - The HD61203 has **64 common outputs X1–X64** and an internal timing generator. In
   **master mode** (M/S = Vcc) it supplies **φ1, φ2, FRM, CL (via CL2) and M** to the
-  column drivers. The HD61102 has no timing source of its own, so this must be the
-  PC-1600's mode (*inferred*).
+  column drivers. The HD61102 has no timing source of its own. **Confirmed** as the
+  PC-1600's mode: the Service Manual key circuit diagram (printed p. 43) ties M/S to VCC.
 - Duty is set by pins DS1/DS2: 1/48 (L,L), **1/64 (L,H)**, 1/96 (H,L), 1/128 (H,H). The
-  TRM's 1/64 duty (§1) is **DS1 = GND, DS2 = Vcc**, so there is one HD61203 and all 64
-  commons are in use.
+  TRM's 1/64 duty (§1) is **DS1 = GND, DS2 = Vcc**, which the key circuit diagram
+  shows. So there is one HD61203 and all 64 commons are in use.
 - At 1/64 duty each HD61102's 6-bit **Z counter** steps through RAM lines 0–63, one per
   common. FRM reloads it from the display-start-line register. Common X*n* therefore shows
   RAM line (start + *n* − 1) mod 64 on every segment output.
@@ -435,14 +435,16 @@ wake-up.
   fosc = **430 kHz** or **215 kHz**, selected by the FS pin. (The printed text says
   "FCS" in the FS row, apparently a typo.) An external clock goes into **CR** with R and C
   left open (range 50–600 kHz, duty 45–55 %).
-- **PC-1600** (*inferred*): CK0 = **217 kHz** (§1) is the 215 kHz case fed as an external
-  clock, so FS = GND. That gives **φ1/φ2 ≈ 108.5 kHz** and a frame rate of about
-  **70 Hz**. It is inside the HD61102's φ limits (cycle 2.5–20 µs; 108.5 kHz ≈ 9.2 µs).
+- **PC-1600** (**confirmed**, Service Manual key circuit diagram, printed p. 43 / PDF
+  p. 46): CK0 (CN1-40) drives the HD61203's **CR** pin with **R and C open**, which is
+  the external-clock setup. The other pins are M/S, FCS, STB, SHL and DS2 = VCC, and FS,
+  DS1, CL1 and TH = GND. So CK0 = **217 kHz** (§1) is the 215 kHz case, which gives
+  **φ1/φ2 ≈ 108.5 kHz** and a frame rate of about **70 Hz**. It is inside the HD61102's φ limits (cycle 2.5–20 µs; 108.5 kHz ≈ 9.2 µs).
   It follows that the HD61102s get **no clock while port 37H bit 4 = 0**, so busy never
   clears and the display does not refresh. The boot ROM must enable CK0 before it
   polls busy.
 - **HD61102 busy time** at 108.5 kHz is about **9.2–27.6 µs** per instruction or data
-  access (*inferred* from §9.2's formula).
+  access (§9.2's formula at the confirmed φ).
 - **MPU bus (HD61102):** E cycle ≥ 1000 ns, E high ≥ 450 ns, E low ≥ 450 ns, address
   setup ≥ 140 ns, write data setup ≥ 200 ns, read data delay ≤ 320 ns. These are the
   limits the SC-7852's delayed `E` strobe (§3) has to meet.
