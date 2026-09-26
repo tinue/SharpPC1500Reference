@@ -1,0 +1,34 @@
+# Test 3: both modules program areas; ML areas larger than one bank
+# Program-area test 3 -- see README.md for what to do after it loads.
+# PC-1600, no plotter, two CE-1600M. Nothing is loaded here: programs go in
+# by hand with (B)LOAD"COM1:" + sde.
+
+model: PC-1600
+
+memory-expansion-1:
+  - modulespec: CE-1600M
+memory-expansion-2:
+  - modulespec: CE-1600M
+
+keys:
+  - key: mode          # -> PRO
+  - type: NEW0
+  - key: mode          # -> RUN
+# Retype both CE-1600Ms as program modules (MEM drops to 11834)
+  - type: INIT"S1:","P"
+  - type: INIT"S2:","P"
+# ML areas of &5000 (20283 bytes = rest of bank 0/2 + 4 KB of bank 1/3)
+  - key: mode          # -> PRO
+  - type: NEW"S1:",&5000
+  - type: NEW"S2:",&5000
+  - key: mode          # -> RUN
+  - type: TITLE"S0:"
+# COM1: 9600 8N1, no handshake (Calc-U-1600 User Guide ch. 7)
+  - type: SETCOM "COM1:",9600,8,N,1,N,N
+  - type: OUTSTAT "COM1:"
+  - type: SNDSTAT "COM1:",28
+  - type: RCVSTAT "COM1:",28
+  - type: INIT "COM1:",4096
+  - key: shift
+  - key: cl
+  - type: PRINT"T3 large ML  MEM=";MEM

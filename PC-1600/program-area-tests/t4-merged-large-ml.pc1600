@@ -1,0 +1,29 @@
+# Test 4: both modules merged into S0; one very large ML area
+# Program-area test 4 -- see README.md for what to do after it loads.
+# PC-1600, no plotter, two CE-1600M. Nothing is loaded here: programs go in
+# by hand with (B)LOAD"COM1:" + sde.
+
+model: PC-1600
+
+memory-expansion-1:
+  - modulespec: CE-1600M
+memory-expansion-2:
+  - modulespec: CE-1600M
+
+keys:
+  - key: mode          # -> PRO
+  - type: NEW0
+  - key: mode          # -> RUN
+# ML area of &A000 (40763 bytes) in the merged S0 -- NEW needs PRO mode
+  - key: mode          # -> PRO
+  - type: NEW"S0:",&A000
+  - key: mode          # -> RUN
+# COM1: 9600 8N1, no handshake (Calc-U-1600 User Guide ch. 7)
+  - type: SETCOM "COM1:",9600,8,N,1,N,N
+  - type: OUTSTAT "COM1:"
+  - type: SNDSTAT "COM1:",28
+  - type: RCVSTAT "COM1:",28
+  - type: INIT "COM1:",4096
+  - key: shift
+  - key: cl
+  - type: PRINT"T4 big ML  MEM=";MEM
