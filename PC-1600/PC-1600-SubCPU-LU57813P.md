@@ -307,9 +307,9 @@ nibble first (`80H`+n each). The read returns 9 nibbles for the clock and 7 for 
 (month, day, hour, minute; no seconds).
 
 **`WAKE$(0)` syntax.** The ROM parses `"MM/DD/HH/mm"` (P1-B3 `6DCDH`–`6E22H`, each
-digit may be `?`) and then expects **`:`** before the command string (`6E23H` compares
-`3AH`). The command string goes to `FF00H`, at most 32 bytes. A `;` there, as some
-manual transcriptions show, gives ERROR 1. Checked on the ROM in Calc-U-1600:
+digit may be `?`) and then expects `:` before the command string (`6E23H` compares
+`3AH`). The command string goes to `FF00H`, at most 32 bytes. Checked on the ROM in
+Calc-U-1600:
 `WAKE$(0)="09/26/13/31:POKE &FF80,77"+CHR$(13)`, then `POWER OFF`, switches on at
 13:31:00 and runs the POKE.
 
