@@ -157,7 +157,7 @@ to SIO after an RS-232C session to save battery (see also `PC-1600-Serial-Hardwa
   initial bank configuration (`PC-1600-Memory-Bank-Switching.md` Part 3).
 - `ELH#` goes high → the SC-7852 runs first.
 - Standard Z-80 reset state, then the reset routine selects IM 2, sets the IRQ mask, and
-  runs the boot search. Reset cause is stored at F1ABH.
+  runs the boot search. Reset cause is stored at FA1BH.
 
 ### 6.1 Power-on process (TRM §3.5.1)
 
@@ -200,7 +200,7 @@ At the end of the power-on process the IOCS jumps to an entry point chosen in th
    | 6 | power-on via the wakeup function |
    | 7 | power-on via the SIO `CI` signal |
 
-   (Same bitfield as the F1ABH reset-cause byte, `PC-1600-Memory-Bank-Switching.md`
+   (Same bitfield as the FA1BH reset-cause byte, `PC-1600-Memory-Bank-Switching.md`
    Part 6.)
 
 ## 7. Peripheral catalogue (TRM Chapter 1)

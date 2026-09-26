@@ -132,6 +132,44 @@ and `VEE` are cut. The system is on when the `BFO` output of the power circuit i
 
 At power-on the sub-CPU holds the SC-7852 in reset through `P0` for 30 ms.
 
+### 4.1 How the ROM switches off and back on (ROM disassembly)
+
+**Off.** The system-off command is operand **`EAH`** (timer IOCS 20H, P2-B6 `A88EH`). The
+OFF key and auto power-off both end in the LH-5803's OFF routine (rom1500 `E527H`): it
+loads `UH = 15H`, waits for parallel-status BUSY = 0, writes `15H` to port 21H **without
+complementing it** (so the sub-CPU sees `~15H` = `EAH`), waits for XBUSY to clear, and
+executes `HLT` at `E553H`. That HALT is where power goes; nothing after it runs on a real
+unit. Before that, the Z-80 side (P0-B0 `0B66H`–`0BB2H`) saves its registers on the
+stack, stores SP at **`F0DAH`**, and writes the signature **`A5H A5H A5H A5H`** at
+**`FA08H`** (the `ZZ` arithmetic register, reused as scratch).
+
+**On.** Every power-on is a Z-80 reset. The boot code (P0-B0 `0346H`) reads the cause with
+IOCS **15H** (operand `A5H`, not in the TRM list), reorders the bits and stores the result
+at **`FA1BH`**. (Older notes in this corpus give the address as F1ABH, but the ROM uses
+FA1BH.) The reordering maps sub-CPU answer bits to the TRM's start-cause bits
+(`PC-1600-Machine-Overview.md` §6.3):
+
+| Answer bit | FA1BH bit | Cause |
+|---|---|---|
+| 7 | 1 | RESET switch |
+| 6 | 2 | reset from the external bus (`KL`) |
+| 5 | 0 | ALL RESET (FA1BH is then forced to 01H) |
+| 4 | — | ignored |
+| 3 | 4 | power-on by the ON key |
+| 2 | 5 | power-on from the external bus |
+| 1 | 6 | power-on by the wake-up timer (`WAKE$(0)`) |
+| 0 | 7 | power-on by RS-232C `CI` (`WAKE$(1)`) |
+
+An all-zero answer is also stored as 10H, the same as ON-key power-on. For any power-on
+cause (FA1BH ≥ 10H), `07E6H` checks the `FA08H` signature. If it is valid, `SP` comes back
+from `F0DAH` and the machine resumes where it was switched off. The BASIC start
+(P0-B0 `0C04H`, `0D67H`) sends the command string at `FF00H` (`WAKE$(0)`) or `FF20H`
+(`WAKE$(1)`) to the key buffer when FA1BH bit 6 or 7 is set.
+
+The ROM also has a software shortcut: if the power-off call returns (P0-B0 `0BB6H`), it
+jumps into the boot path with `A = 10H`, which is the same as an ON-key power-on without
+the reset.
+
 ## 5. Interrupts to the Z-80
 
 `Z7` → `INT6`, which is SC-7852 port-32H/35H bit 6 (`PC-1600-CPU-SC7852-Z80.md` §5.2).
@@ -146,6 +184,22 @@ The Service Manual lists four causes that raise `Z7`:
 external-keyboard input has been read. The software view of this, with a cause and mask
 bitfield (wake-up, alarm 1, alarm 2, 1 s, 0.5 s), is IOCS 10H–12H in
 `PC-1600-IO-Ports.md` §7.1. The 64 Hz tick on `Z6` is a separate line (`INT4`).
+
+**The ROM's INT6 handler** (P1-B3 `419FH`) reads SRIRQ, ORs it with `F07EH`, stores the
+bits the SWMSK mask (`F12AH`) leaves disabled back into `F07EH`, and acts on the enabled
+ones. The ROM keeping the disabled ones itself means **reading SRIRQ clears the pending
+bits in the sub-CPU**. The handler tests these bits:
+
+| Bit | Handler work |
+|---|---|
+| 1 (0.5 s) | battery check via SRA0 (`A8H`: < AFH sets low battery, ≥ BEH clears it), then SRINP (`A3H`: CI → `ON PHONE`), then the auto-power-off countdown (`F0ACH`, 4B0H half-seconds = 10 min) |
+| 0 | `CALL 8075H`, probably the analog-input / external-keyboard event (not traced) |
+| 7 | wake-up timer → hook `F0C8H` → sets `F127H` b7 |
+| 6 | alarm 1 (`ON TIME$`) → hook `F0C2H` → `F127H` b6 |
+| 5 | alarm 2 (`ALARM$`) → hook `F0C5H` → `F127H` b5 |
+
+Bit 2 (the TRM's "1 s signal") is not tested by this handler. The boot enables bits 1
+and 0 (SRMSK OR 03H → SWMSK, P0-B0 `05F1H`).
 
 ## 6. Command protocol (Service Manual §4-3, TRM §7.1.5)
 
@@ -210,17 +264,18 @@ Dispatcher: `CALL 01D5H` with the IOCS number in C → `A798H` → a jump table 
 | 01H | SBEEP | `A87B` | `91H` |
 | 02H / 04H / 06H / 08H | SWRT / SWWT / SWA1T / SWA2T | `A84B` | `F0H`+n, 8 × `80H`+n, then `92H` / `94H` / `96H` / `98H` |
 | 03H / 05H / 07H / 09H | SRRT / SRWT / SRA1T / SRA2T | `A881` | `93H` / `95H` / `97H` / `99H`, then 9 nibble fetches (clock) or 7 (timers) |
-| 0AH–0EH | — | `A905` | `F0H`+n, 15 × `80H`+n (8 bytes), `9AH`–`9EH`, then `A3H` and a test of one bit (1, 4 or 8) of the answer → CF. Some 8-byte compare or store. Possibly the BASIC `PASS` password (unconfirmed). |
+| 0AH–0EH | — | `A905` | `F0H`+n, 15 × `80H`+n (8 bytes), `9AH`–`9EH`, then `A3H` and a test of one bit of the answer → CF: bit 2 after 0AH/0BH, bit 3 after 0CH/0DH, bit 0 after 0EH. **0AH / 0BH are `PASS`**: store the password / clear it if the 8 bytes match; SRINP bit 2 then reports whether a password is set. 0CH–0EH: unknown 8-byte functions. |
 | 0FH | — | `A92F` | `9FH`, then 8 nibble fetches (4 bytes) |
 | 10H | SWMSK | `A8E7` | `F0H`+hi, `80H`+lo of the mask, then `A0H` |
 | 11H / 12H / 13H | SRMSK / SRIRQ / SRINP | `A8F0` | `A1H` / `A2H` / `A3H`, one byte read from 33H |
-| 14H | SWPON | `A893` | `F0H`+n, `A4H` |
-| 15H, 17H, 1BH–1DH, 1FH | — | `A8F0` | `A5H`, `A7H`, `ABH`–`ADH`, `AFH`, one byte read |
+| 14H | SWPON | `A893` | `F0H`+n, `A4H`. The nibble (kept at `F12BH`): b0 power-on by `CI` (`WAKE$(1)`), b1 power-on by the wake-up timer (`WAKE$(0)`), b2 wake-up beep, b3 hour signal |
+| 15H | *(reset cause)* | `A8F0` | `A5H`, one byte read: the power-on / reset cause, §4.1. Read once by the boot code (P0-B0 `0346H`). |
+| 17H, 1BH–1DH, 1FH | — | `A8F0` | `A7H`, `ABH`–`ADH`, `AFH`, one byte read |
 | 16H | — | `A8F8` | if `F12CH` b1 = 1 and b0 = 0: `A6H`, one byte read. Otherwise returns CF = 1 with no traffic. |
 | 18H / 19H / 1AH | SRA0 / SRA1 / SRA2 | `A8F0` | `A8H` / `A9H` / `AAH`, one byte read (A/D value) |
 | 1EH | — | `A8C2` | `F0H`+n (n = 9, 5 or 3 from A), `AEH`, then `53H` |
-| 20H | — | `A88E` | `EAH` |
-| 21H | SRPON | `A89C` | `69H`, one nibble fetch |
+| 20H | *(system off)* | `A88E` | `EAH`: switch the system off (§4.1). The LH-5803 OFF routine sends the same byte. |
+| 21H | SRPON | `A89C` | `69H`, one nibble fetch: the SWPON nibble back |
 | 22H / 23H | SWAB / SRAB | `A8A4` / `A8BE` | `6AH` then `80H`+n (write) or a nibble fetch (read) |
 | 24H | SWA1A | `A93B` | `3CH`, then the two threshold bytes as nibbles |
 | 25H | *(probe)* | `A951` | `B0H` → expect `AAH`; `B1H` → expect `55H` (`PC-1600-IO-Ports.md` §7.3) |
@@ -232,21 +287,41 @@ the answer is longer than one byte.
 
 **Cross-reference.** `PC-1600-IO-Ports.md` §7.3 gives the 0.5 s ISR's two requests in
 port-21H terms as `5DH` and `5CH`. Those are the complements of `A2H` and `A3H`, i.e.
-IOCS 12H SRIRQ (read interrupt cause) and 13H SRINP. That fits §5, where reading the
-cause is what clears `Z7`, but the ISR itself has not been traced here.
+IOCS 12H SRIRQ (read interrupt cause) and 13H SRINP. The ISR is traced in §5.
+
+### 7.3 Clock and timer data (P2-B6 `A84BH` / `A881H`)
+
+All four blocks (clock, wake-up timer, alarm 1, alarm 2) use the same layout. The write
+sends 9 nibbles: first the **month** as one nibble (`F0H`+n, from the low nibble of the
+parameter block's first byte), then **day, hour, minute and second** as BCD pairs, high
+nibble first (`80H`+n each). The read returns 9 nibbles for the clock and 7 for a timer
+(month, day, hour, minute; no seconds).
+
+A field whose nibbles are all `F` is a **wildcard**. BASIC turns a `?` digit into nibble
+`F` (rom3b `50D6H`/`510AH`), so `ALARM$="??/??/13/30"` goes out with month `F` and day
+`FF`. The read-back display treats `0FH`/`FFH` as `??` (`50EAH`). For the clock write
+(SWRT), the same all-`F` field means "leave this field unchanged". That is how a partial
+`TIME$=` or `DATE$=` works.
+
+Writing a timer also clears its pending bit in `F127H` (b7 wake-up, b6 alarm 1, b5
+alarm 2). Writing the clock clears all three (mask table at `A868H`).
 
 ## 8. Open items
 
 - **Chip identity.** Probably a mask-ROM member of Sharp's SM 4-bit family (pin naming,
   4-bit data paths, 1.2288 MHz ÷ 4), but no part cross-reference has been found. Its ROM
   is not dumped.
-- **Undocumented IOCS 0AH–0FH, 15H–17H, 1BH–1FH, 20H, 26H** and the commands `53H`,
-  `A3H`, `EAH`, `E5H`: purpose inferred only from the handler shape. Tracing their
-  BASIC-level callers (`PASS`, `ON ADIN`, `KEY` click, power-off) would name them.
-- **Which command switches the system off.** It must be one of the undocumented ones;
-  the `PCTRL`/`Q0` completion is documented but the byte is not.
+- **Still-unnamed commands:** IOCS 0CH–0FH, 17H, 1BH–1FH, 26H (`E5H`) and the
+  follow-up byte `53H` after 1EH. 1EH/24H/16H/1CH/1DH belong to the analog-input
+  interrupt / external-keyboard mode (`F12CH` bits 0–1, 4), but that path isn't traced.
+  SWAB's two bits (the alarm-signal condition) aren't named yet either.
+- **The LH-5803's other raw command, `23H`** (rom1500 `E523H`, operand `DCH`): its answer
+  bit 2 is tested, but its meaning is unknown.
+- **The F-pin tones** (key click, alarm, wake-up beep, hour signal): frequency and length
+  are unmeasured.
+- **When exactly the pending bits are set**: the Service Manual says the timers are
+  compared "at each minute carry", but whether a wildcard alarm fires once per matching
+  minute or keeps repeating isn't documented.
 - **External-keyboard protocol** on the analog jack (`KC0`, `Z4`): no documentation
   beyond the pin notes.
-- **RTC data format**: the nibble order of the SWRT/SRRT blocks (TRM §3.9 param block,
-  still open in `PC-1600-IO-Ports.md`) against the 9 nibbles on the wire.
 - **Pin 1 / pin 64** both labelled `Q0` in the manual.

@@ -21,7 +21,7 @@ place, not silently merged/resolved).
 
 **Companion:** the slot / boot / bank-management addresses in this same F000H–FFFFH range
 (F0AEH/F0AFH module bitmaps, F0DCH/F0DDH boot bank, F07DH Port-3D mirror, F123H–F126H
-config, F1ABH reset cause, F015H–F05BH slot descriptors) are in
+config, FA1BH reset cause, F015H–F05BH slot descriptors) are in
 `PC-1600-Memory-Bank-Switching.md` Part 6, not repeated here. Chapter 6 §6.3 covers the
 interpreter / editor / LCD / keyboard / plotter work variables; Part 6 covers the
 slot/bank plumbing. Together they map the region. §4 below adds the `ADTBL`/`SxMTb`
@@ -342,7 +342,7 @@ address-by-address dump of F000H–FFFFH, complementing the named-variable table
 | Addr | Contents |
 |---|---|
 | F127H | pending BASIC timer interrupt request — b7: `WAKE$(0)`, b6: `ON TIME$`, b5: `ALARM$` |
-| F12AH | which interrupts are *enabled* — b7: `WAKE$(0)`, b3: `ON TIME$`, b5: `ALARM$`, b1: `Keystat 1` (bit layout as transcribed, some bit positions repeat across the two bytes in the source and may be a transcription slip) |
+| F12AH | which interrupts are *enabled* — b7: `WAKE$(0)`, b3: `ON TIME$`, b5: `ALARM$`, b1: `Keystat 1` (bit layout as transcribed, some bit positions repeat across the two bytes in the source and may be a transcription slip). The ROM passes this byte to SWMSK as-is (P2-B6 `A8E7H`), so it follows the sub-CPU mask layout: b7 wake-up, **b6** alarm 1 (`ON TIME$`), b5 alarm 2, b1 0.5 s, b0 (`PC-1600-IO-Ports.md` §7.1) |
 | F12BH | signal flags — b3: hour signal, b2: wake-beep, b1: wake, b0: `WAKE$(1)` |
 | F12CH | b0: `ON ADIN` interrupt set |
 | F12DH | `ON ADIN` lower threshold — referenced from `PC-1600-IO-Ports.md` §7 (`SWA1A`) |
@@ -519,7 +519,7 @@ Appendix 7 names the individual registers, matching the `XX` register referenced
 | Addr | Name |
 |---|---|
 | FA00H | XX |
-| FA08H | ZZ |
+| FA08H | ZZ. Also the power-off signature `A5H`×4 (FA08H–FA0BH) that a power-on reset checks before it resumes (`PC-1600-SubCpu-LU57813P.md` §4.1; SP is saved at F0DAH) |
 | FA10H | YY |
 | FA18H | UU |
 | FA20H | VV |

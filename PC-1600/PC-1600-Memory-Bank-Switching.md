@@ -431,7 +431,7 @@ ROM modules can allocate working memory via `CALL 02DFH`. Parameters: DE = size 
 
 ### Boot Sequence
 
-1. Reset cause determined (stored at F1ABH). Bits: b0=ALL RESET, b1=Internal RESET, b2=External RESET, b4=POWER ON, b5=External POWER ON, b6=WAKE$(0), b7=WAKE$(I)=CI
+1. Reset cause determined (stored at FA1BH; the source says F1ABH, but the ROM writes FA1BH at P0-B0 `0368H`, see `PC-1600-SubCpu-LU57813P.md` §4.1). Bits: b0=ALL RESET, b1=Internal RESET, b2=External RESET, b4=POWER ON, b5=External POWER ON, b6=WAKE$(0), b7=WAKE$(I)=CI
 2. Peripheral reset and device identification via ROM-Bit scan
 3. `CALL 4002` issued to all devices (A=07: device can deregister)
 4. Memory module detection (changed config sets FA23H bit b7 = "NEW0?")

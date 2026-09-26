@@ -372,8 +372,11 @@ events the sub-CPU itself raises, all of which funnel into port-32H/35H **bit 6*
 | 5 | alarm timer 2 |
 | 2 | 1 s signal |
 | 1 | 0.5 s signal |
+| 0 | not in the TRM table; the ROM enables it at boot and its ISR calls `8075H` for it, probably the analog-input / external-keyboard event |
 
-(mask: bit = 1 → enabled; SRIRQ: bit = 1 → that event is pending)
+(mask: bit = 1 → enabled; SRIRQ: bit = 1 → that event is pending. Reading SRIRQ clears
+the pending bits, and the ROM keeps the masked-off ones in `F07EH` itself. The ROM's
+handler never tests bit 2. Details: `PC-1600-SubCpu-LU57813P.md` §5.)
 
 
 ### 7.2 Analog-input connector (CN6)
@@ -430,8 +433,9 @@ for §6.1 never slips, so **it answers the probe**.
   bits for users as 0 = serial receive, 1 = peripherals (printer and floppy), 4 = 1/64 s
   timer, 6 = 1/2 s timer, and says a 35H bit of 0 disables that cause. That agrees with
   the TRM table; it doesn't settle edge/level behaviour.
-- §3.9: the SWRT/SRRT RTC param-block byte layout; the ADC value range/scaling for
-  SRA0/SRA1/SRA2; the SWPON power-on-condition mask bits.
+- §3.9: the ADC value range/scaling for SRA0/SRA1/SRA2. (~~The SWRT/SRRT param-block
+  layout and the SWPON bits~~ are **resolved** from the ROM: `PC-1600-SubCpu-LU57813P.md`
+  §7.2/§7.3.)
 - ~~§3.6.2 / §7.6: TC8576F parameter-register and command-byte formats~~ — **resolved**
   (2026-09-26, Toshiba TC8576AF data sheet): `PC-1600-CPC-TC8576.md`.
 - ~~§3.7 / §3.8: CE-1600P (80–83H) and CE-1600F (78–7FH) port detail~~ — **resolved**
