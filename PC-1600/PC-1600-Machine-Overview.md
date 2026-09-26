@@ -88,6 +88,9 @@ accesses to certain regions are in `PC-1600-CPU-SC7852-Z80.md` §2.4.
 
 ## 4. Sub-CPU ↔ main-CPU interface (TRM §7.1.5)
 
+The sub-CPU itself (pins, power states, command set) is covered in
+[`PC-1600-SubCPU-LU57813P.md`](PC-1600-SubCPU-LU57813P.md).
+
 The LU-57813P sub-CPU is reached through the **TC8576F UART's parallel side** plus a
 data buffer **inside the LR38041 gate array**.
 

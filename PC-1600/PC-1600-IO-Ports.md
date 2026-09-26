@@ -328,7 +328,8 @@ The keyboard-click routine is `SBEEP` (IOCS 01H via the timer dispatcher, §7).
 
 ## 7. Timer, RTC, and analog port (TRM §3.9)
 
-The sub-CPU (LU-57813P) owns the real-time clock, the wakeup/alarm timers, and a
+The sub-CPU (LU-57813P, `PC-1600-SubCPU-LU57813P.md`, which also gives the command byte
+each IOCS below sends) owns the real-time clock, the wakeup/alarm timers, and a
 3-channel ADC. All of it is reached through IOCS routines, **not** raw ports:
 **IOCS number → `C`, then `CALL 01D5H`.** Most clobber only `AF`.
 
