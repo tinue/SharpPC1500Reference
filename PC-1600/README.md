@@ -45,6 +45,7 @@ primary sources.
 | [`PC-1600-Filesystem.md`](PC-1600-Filesystem.md) | **first pass** | The file system (TRM §3.3): the 16-byte file header, the 57-byte FCB + 256-byte buffer, the file IOCS routines (C = IOCS #, `CALL 01DEH`; error bitfield), and the FAT-style RAM-disk / floppy layout — boot sector, media-ID geometry table, single-byte-entry FAT. Directory-entry format (§3.8.3) pending. |
 | [`PC-1600-Peripherals-Hardware.md`](PC-1600-Peripherals-Hardware.md) | **in progress** | Printer/plotter (CE-1600P) and floppy (CE-1600F) IOCS + peripheral hardware (TRM §3.7/§3.8/Ch 8). §3.7 printer + §3.8 floppy routine sets filled; Ch 8 pending. |
 | [`PC-1600-Keyboard.md`](PC-1600-Keyboard.md) | **complete (hw)** | Scan mechanism (1/64 s via sub-CPU → INT4), strobe/sense wiring (TRM §7.4/§7.9); **plus the full §3.2 key IOCS routines**, the 9-strobe software scan matrix, the §3.2.2 work area (KEYWK1–3, buffer pointers, 64-byte buffer F0DF–F11E), the 4 translation-table pointers + redefinition, and the ON/BREAK path (I/O 1BH b1). Emulator-ready. Key-code value table (§10.2) — agent-facing, not emulator-critical — pending. |
+| [`PC-1600-CPC-TC8576.md`](PC-1600-CPC-TC8576.md) | **complete (chip)** | The TC8576F/AF CPC (UART + Centronics port) at I/O 20–23H, from the Toshiba data sheet: full 44-pin pinout with PC-1600 connections, the port-23H three-way write decode, PR0–PR7, serial mode/command/status, parallel output-mode DSTB/XBUSY/PRIME, reset state, AC timing. Also covers how the ROM drives it: boot init (÷2 prescaler → baud = 76800/B), the SETCOM path, the `F14FH` command shadow, the complemented sub-CPU command send, RS-232C CS/CD/DR read through FAULT/SLCT/PE, and PRIME as the RS-232C/SIO switch. |
 | [`PC-1600-Serial-Hardware-Notes.md`](PC-1600-Serial-Hardware-Notes.md) | **first pass** | RS-232C/SIO share one TC8576F; PRIM select; BX7269W level shifter; VDD/VEE; TC8576F pinout (TRM §7.6). Plus the FTDI USB/UART wiring how-to. |
 | [`PC-1600-ROM-Versions.md`](PC-1600-ROM-Versions.md) | **complete** | The two BASIC ROM revisions (OLD / NEW) and Sharp's three-`PEEK #` identification table, mapped onto the CS001 / CS123 / CS24 chips; confirmed NEW against the real-hardware dumps and PockEmul (byte-identical); resolves the jump table's "on some ROM versions, 4 more jumps follow" caveat by enumerating those entries. SOFTWARE-INFO bulletin 1600-010E. |
 
@@ -99,6 +100,9 @@ per-section:
   machine-language commands and PC-1500 compatibility (App. E/H).
 - **Module service manuals** — CE-1601M; and the third-party *superRAM* manual for the
   vertical-bank mechanism.
+- **Toshiba *TC8576AF/TC8577AP/TC8578AP Technical Data*** (1987 data book, pp.159–196) —
+  the CPC (UART + Centronics) data sheet, source of `PC-1600-CPC-TC8576.md`. Local scan:
+  `~/SynologyDrive/Dokumente/PDF/Vintage/Sharp/PC-1600/Toshiba_TC8576AF_CPC_1987.pdf`.
 - **SHARP SOFTWARE-INFO bulletins** (Sharp Electronics Europe, Software Center Hamburg,
   1987–88) — dealer/agent errata and tips sheets: Nos. 1600-010E, -011, -012, -014G,
   -015G. Primary Sharp material, but *advisory* rather than reference-grade: they document

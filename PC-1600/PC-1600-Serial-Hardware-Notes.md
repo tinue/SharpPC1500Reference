@@ -59,6 +59,10 @@ level shifting.
 
 ### TC8576F pinout (as wired in the PC-1600)
 
+Partial, from TRM §7.6. The complete 44-pin table, including the parallel side and the
+RS-232C CS/CD/DR inputs the ROM reads through FAULT/`/SLCT`/`/PE`, is in
+`PC-1600-CPC-TC8576.md` §2.
+
 | Pin | Symbol | Dir | Active | Function |
 |---|---|---|---|---|
 | 1 | (NC) | — | — | not used |
@@ -76,8 +80,10 @@ level shifting.
 
 **Baud rate:** IC clock ÷ programmable 4-bit prescaler → SYS-CLK ÷ programmable 12-bit
 divider → any rate **50–38400 baud**. The clock into the UART is `CLK1` from the gate
-array (CL2 passed through while the system is on). Parameter/command byte formats: TRM
-§3.6.2 — pending. BASIC-level control (`SETCOM`, `SNDSTAT`, …): `PC-1600-Serial-Commands.md`.
+array (CL2, 1.2288 MHz, passed through while the system is on). The ROM sets the
+prescaler to ÷2, so baud = 76800 / divisor. The full pinout, the parameter/command byte
+formats and the ROM's programming sequence are in
+[`PC-1600-CPC-TC8576.md`](PC-1600-CPC-TC8576.md). BASIC-level control (`SETCOM`, `SNDSTAT`, …): `PC-1600-Serial-Commands.md`.
 
 ## 2. FTDI USB/UART wiring (practical)
 

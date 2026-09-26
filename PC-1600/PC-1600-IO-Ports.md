@@ -226,9 +226,12 @@ dispatcher (§7 below), not exclusive to one function. 24H–27H mirror 20H–23
 not a second independent register block.
 
 **Baud rate:** the IC's clock input is divided by a programmable 4-bit prescaler →
-SYS-CLK, then by a programmable 12-bit divider (the baud-rate generator) → any rate
-50–38400 baud. Programmed via the parameter register (port 22H write) and command
-sequence (port 23H write). Exact byte formats: TRM §3.6.2 / §7.6 detail — pending.
+SYS-CLK, then by a programmable 12-bit divider (the baud-rate generator). In the PC-1600,
+XCLK = 1.2288 MHz and the boot code sets the prescaler to ÷2, so **baud = 76800 / B**
+(50–38400 baud). All the register and bit formats are in
+[`PC-1600-CPC-TC8576.md`](PC-1600-CPC-TC8576.md), from the Toshiba data sheet: the port-23H
+three-way write decode, PR0–PR7, serial status/command, parallel status/command. That
+document also covers how the ROM programs the chip.
 
 The BASIC-level view of these registers (`SETCOM`, `SNDSTAT`, etc.) is in
 `PC-1600-Serial-Commands.md`; the line-signal hardware in `PC-1600-Serial-Hardware-Notes.md`.
@@ -403,7 +406,9 @@ LU-57813P. It has two modes, chosen by **`F0B8H` bit 0**:
 Boot clears bit 0 and then ORs in the result of timer **IOCS 25H** (P0-B0 `03B7H`,
 handler P2-B6 `A951H`). It isn't in the TRM's IOCS list; it is a handshake:
 
-1. send `B0H` (on the wire `4FH`: the routine complements every byte). If the answer
+1. send `B0H` (written to port 21H as `4FH`: the routine complements every byte, and the
+   CPC's inverted `/DATA1–8` outputs turn it back into `B0H` at the sub-CPU —
+   `PC-1600-CPC-TC8576.md` §9.4). If the answer
    read from port 33H is `AAH`,
 2. send `B1H` (`4EH`). If the answer is `55H`, return A = 1, otherwise A = 0.
 
@@ -426,7 +431,8 @@ for §6.1 never slips, so **it answers the probe**.
   the TRM table; it doesn't settle edge/level behaviour.
 - §3.9: the SWRT/SRRT RTC param-block byte layout; the ADC value range/scaling for
   SRA0/SRA1/SRA2; the SWPON power-on-condition mask bits.
-- §3.6.2 / §7.6: TC8576F parameter-register and command-byte formats.
+- ~~§3.6.2 / §7.6: TC8576F parameter-register and command-byte formats~~ — **resolved**
+  (2026-09-26, Toshiba TC8576AF data sheet): `PC-1600-CPC-TC8576.md`.
 - ~~§3.7 / §3.8: CE-1600P (80–83H) and CE-1600F (78–7FH) port detail~~ — **resolved**
   (2026-09-18, Systemhandbuch Appendix 6): full detail now in
   `PC-1600-Peripherals-Hardware.md` §1.2.2/§1.3 (plotter/Centronics dual-mode) and §2.6

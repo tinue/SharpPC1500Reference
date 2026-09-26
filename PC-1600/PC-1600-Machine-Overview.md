@@ -106,9 +106,13 @@ TC8576F (UART)                 LU-57813P (sub-CPU)
 
 **Command protocol:**
 
-1. The SC-7852 checks the sub-CPU is ready (TC8576F `BUSY` high).
+1. The SC-7852 checks the sub-CPU is ready (TC8576F `/BUSY` pin high = parallel-status
+   bit 5 reads 0).
 2. Within 500 µs of a 1/64 s-signal edge, the SC-7852 writes an 8-bit command byte to the
-   UART parallel-data lines DATA1–DATA8, then asserts the UART's `DSTB`.
+   UART parallel-data lines DATA1–DATA8, then asserts the UART's `DSTB`. In practice this
+   is a single `OUT (21H),A` of the **complemented** byte. The CPC inverts `/DATA1–8` and
+   generates DSTB itself, and the ROM then waits for the ACK (`Z9`) by polling the CPC's
+   XBUSY flag (`PC-1600-CPC-TC8576.md` §8.1, §9.4).
 3. The sub-CPU receives the command on R00–R13 and executes it in an interrupt service
    routine. Two command classes:
    - **Type 1 (returns data):** on completion the sub-CPU places return data on R20–R33
@@ -117,7 +121,8 @@ TC8576F (UART)                 LU-57813P (sub-CPU)
    - **Type 2 (no return data):** the sub-CPU pulses `Z9` on receipt; the SC-7852 waits
      for `Z9` to go high.
 
-Approximate timing from the TRM figure: `KI` pulse ≈ 13 µs / 26 µs; `Z9` (ACK) ≈ 19.5 µs;
+Approximate timing from the TRM figure: `KI` pulse ≈ 13 µs / 26 µs (but the ROM's CPC
+settings give ≈ 28 µs delay / 52 µs width — see `PC-1600-CPC-TC8576.md` §12); `Z9` (ACK) ≈ 19.5 µs;
 `Z10` = Ready → Busy → Ready across the command.
 
 The sub-CPU's interrupt into the main CPU is `INT6` (SC-7852 pin 84), carrying: the
