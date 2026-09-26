@@ -403,9 +403,53 @@ that way and write them back one page further on (`8ABAH`).
   (IC3, the TRM's `Y6f`, probably Y64). That is exactly the "16 symbols" of §1.
   **Resolved from ROM code (§6.3):** the ROM does not pack. B=02H is a third byte, at
   **page 4** of the same column 63. Page 4 is RAM lines 32–39, i.e. commons X33–X40, not
-  X49–X64. So the status row's segment line is also driven on at least X33–X40, and the
-  TRM diagram's "X49–X64 into the status row" is incomplete. The emulator, reading these
-  three pages, lights S/CTRL/BATT correctly, which fits this.
+  X49–X64, so the TRM diagram's "X49–X64 into the status row" is incomplete. §9.4.1 has
+  the full wiring from the Service Manual.
+
+#### 9.4.1 Status-row wiring (Service Manual key circuit diagram)
+
+**Source:** PC-1600 Service Manual, key circuit diagram, printed pp. 43–44 (PDF pp. 46–47).
+It shows the LF7204E glass pinout with the status legend printed under the pins. The
+legend strip starts with a **Y64** segment pin, followed by the commons listed below. Pins
+between them that belong to the dot matrix (Y16–Y20, Y36–Y45, Y56–Y64, IC3's Y′11–Y′60)
+only pass through the connector. The ROM writes the symbols to **IC3** (C = 54H, §6.3), so
+that Y64 is IC3's column 63. The sheet uses Y′ for IC3 elsewhere, and the prime is
+missing on this pin.
+
+Common X*n* scans RAM line *n* − 1 (start line 0), so each common is one bit of column 63:
+
+| Common | Page | Bit | Legend | SMBLSET |
+|---|---|---|---|---|
+| X57 | 7 | 0 | BUSY | B=00H b0 |
+| X58 | 7 | 1 | SHIFT | B=00H b1 |
+| X59 | 7 | 2 | ローマ字→カナ (part) | B=00H b2, "—" in the TRM |
+| X60 | 7 | 3 | SMALL | B=00H b3 |
+| X61 | 7 | 4 | III | B=00H b4 |
+| X62 | 7 | 5 | II | B=00H b5 |
+| X63 | 7 | 6 | I | B=00H b6 |
+| X64 | 7 | 7 | DEF | B=00H b7 |
+| X49 | 6 | 0 | DE(G) | B=01H b0 |
+| X50 | 6 | 1 | G(RAD) | B=01H b1 |
+| X51 | 6 | 2 | RAD | B=01H b2 |
+| X53 | 6 | 4 | RESERVE | B=01H b4 |
+| X54 | 6 | 5 | PRO | B=01H b5 |
+| X55 | 6 | 6 | RUN | B=01H b6 |
+| X33 | 4 | 0 | BATT | B=02H b0 |
+| X34 | 4 | 1 | CTRL | B=02H b1 |
+| X35 | 4 | 2 | ローマ字→カナ (part) | B=02H b2, "—" in the TRM |
+| X36 | 4 | 3 | S | B=02H b3 |
+
+So there are 18 electrodes. Every TRM symbol sits on the common its bit predicts. The
+diagram shows no status pin for X52, X56 (page 6 b3, b7) or X37–X40 (page 4 b4–b7).
+**KBII (B=02H b7, X40) therefore has no electrode of its own**, which fits the ROM
+folding it into S. The "ローマ字→カナ" caption is instead two electrodes on **X35 and
+X59**, placed after S in pin order. The diagram doesn't say which part of the caption
+each one lights.
+
+With the western "new" ROM, a probe through boot, KBII, SHIFT, CTRL and MODE never set
+bit 2 of the page-4 shadow (F3C6H) or the page-7 shadow (F64EH). The romaji→kana
+electrodes stay dark on that machine unless a program writes those bits (SMBLSET B=02H
+keeps bit 2: `AND 77H`).
 - **Start line moves everything together.** A non-zero start line rotates the whole
   64-line scan, including the status symbols and the right block. The ROM sets start
   line 0 (`C0H`, §3).
@@ -473,8 +517,10 @@ known.
   `81E8H` (busy-wait + discarded dummy read) and `8AA2H` (four reads) at C = 57H/5BH
   (§9.3).
 - ~~Status-line RAM mapping~~ — resolved 2026-09-26 from the ROM's symbol writer
-  (bank 6 `8220H`): IC3 column 63, pages 7/6/4 + DSPLPTR (§6.3, §9.4). Still open: how
-  commons X33–X40 physically reach the status row.
+  (bank 6 `8220H`): IC3 column 63, pages 7/6/4 + DSPLPTR (§6.3, §9.4). ~~How commons
+  X33–X40 reach the status row~~ — Service Manual glass pinout, §9.4.1.
+- Which part of "ローマ字→カナ" X35 and X59 each light, and whether a Japanese ROM
+  drives them (§9.4.1).
 - IC2/IC3 ADC pin levels, and which 28 IC2 column addresses feed the right block (§9.5).
 - ~~§2's three-column-block (64+64+28) sizes and the right block's wiring~~ — sizes
   from the TRM block diagram (2026-08-30). The right block is IC2 pages 4–7 on commons
