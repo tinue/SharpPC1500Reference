@@ -139,9 +139,16 @@ OFF key and auto power-off both end in the LH-5803's OFF routine (rom1500 `E527H
 loads `UH = 15H`, waits for parallel-status BUSY = 0, writes `15H` to port 21H **without
 complementing it** (so the sub-CPU sees `~15H` = `EAH`), waits for XBUSY to clear, and
 executes `HLT` at `E553H`. That HALT is where power goes; nothing after it runs on a real
-unit. Before that, the Z-80 side (P0-B0 `0B66H`–`0BB2H`) saves its registers on the
-stack, stores SP at **`F0DAH`**, and writes the signature **`A5H A5H A5H A5H`** at
-**`FA08H`** (the `ZZ` arithmetic register, reused as scratch).
+unit. Before handing over, the Z-80 side marks `FA08H` (the `ZZ` arithmetic register,
+reused as scratch) in one of two ways:
+
+- **OFF key / `POWER OFF`** (IOCS `01EAH` → P0-B0 `0B07H`): writes **`AAH`×4**. Nothing is
+  saved to resume.
+- **Auto power-off** (the INT6 handler's countdown, P1-B3 `426AH` → `0005H` → P0-B0
+  `0B66H`): saves the registers on the stack, stores SP at **`F0DAH`**, and writes
+  **`A5H`×4**.
+
+(Both checked by running the real ROM in Calc-U-1600, 2026-09-26.)
 
 **On.** Every power-on is a Z-80 reset. The boot code (P0-B0 `0346H`) reads the cause with
 IOCS **15H** (operand `A5H`, not in the TRM list), reorders the bits and stores the result
@@ -161,8 +168,10 @@ FA1BH.) The reordering maps sub-CPU answer bits to the TRM's start-cause bits
 | 0 | 7 | power-on by RS-232C `CI` (`WAKE$(1)`) |
 
 An all-zero answer is also stored as 10H, the same as ON-key power-on. For any power-on
-cause (FA1BH ≥ 10H), `07E6H` checks the `FA08H` signature. If it is valid, `SP` comes back
-from `F0DAH` and the machine resumes where it was switched off. The BASIC start
+cause (FA1BH ≥ 10H), `07E6H` checks the `FA08H` signature. Only `A5H`×4 counts: then `SP`
+comes back from `F0DAH`, the signature is cleared (`07FEH`), and the machine resumes where
+auto power-off stopped it. After the OFF key (`AAH`) the ROM restarts BASIC with the
+program kept. The BASIC start
 (P0-B0 `0C04H`, `0D67H`) sends the command string at `FF00H` (`WAKE$(0)`) or `FF20H`
 (`WAKE$(1)`) to the key buffer when FA1BH bit 6 or 7 is set.
 
@@ -296,6 +305,13 @@ sends 9 nibbles: first the **month** as one nibble (`F0H`+n, from the low nibble
 parameter block's first byte), then **day, hour, minute and second** as BCD pairs, high
 nibble first (`80H`+n each). The read returns 9 nibbles for the clock and 7 for a timer
 (month, day, hour, minute; no seconds).
+
+**`WAKE$(0)` syntax.** The ROM parses `"MM/DD/HH/mm"` (P1-B3 `6DCDH`–`6E22H`, each
+digit may be `?`) and then expects **`:`** before the command string (`6E23H` compares
+`3AH`). The command string goes to `FF00H`, at most 32 bytes. A `;` there, as some
+manual transcriptions show, gives ERROR 1. Checked on the ROM in Calc-U-1600:
+`WAKE$(0)="09/26/13/31:POKE &FF80,77"+CHR$(13)`, then `POWER OFF`, switches on at
+13:31:00 and runs the POKE.
 
 A field whose nibbles are all `F` is a **wildcard**. BASIC turns a `?` digit into nibble
 `F` (rom3b `50D6H`/`510AH`), so `ALARM$="??/??/13/30"` goes out with month `F` and day
