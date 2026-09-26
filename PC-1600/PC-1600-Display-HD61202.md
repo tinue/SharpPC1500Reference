@@ -13,6 +13,8 @@ Systemhandbuch scan. §3.1 (IOCS routines for LCD, work area, character font) an
 headless trace of the genuine PC-1600 boot ROM (`romI-0.bin`/`romIV-6.bin`) executing
 against a from-scratch SC-7852 emulation, 2026-08-30 — the real firmware's own I/O
 behavior, not a description of it, so treated as primary alongside the TRM.
+Chip-level behavior (instruction set, status bits, read pipeline, duty/clock options) from
+the **Hitachi HD61102 and HD61203 datasheets (1989 data book)**, §9 below.
 
 ---
 
@@ -68,22 +70,14 @@ gives the exact internal Y/X wiring, not just the block sizes:
 - **Left 64-dot block** (screen columns 0–63): driven by **IC2**'s `Y1–Y64` outputs.
 - **Centre 64-dot block** (columns 64–127): driven by **IC3**'s own `Y1–Y64` outputs,
   labelled independently in the diagram.
-- **Right 28-dot block** (columns 128–155): driven by `Y1–Y28`. **IC2's own label in the
-  diagram reads `Y1–Y66` total** (not `Y1–Y64 + 28 more`), which a first reading took to
-  mean IC2 has only 66 physical Y outputs and the right block is a bare duplicate of the
-  left block's own first 28 columns, sharing physical pins — **that reading is not
-  reliable and is contradicted by an independent emulator's own working implementation**
-  (PockEmul's `src/lcd/Lcdc_pc1600.cpp`, `disp()` — an emulator cross-check per this
-  repo's own "Sources & validation" convention, not a TRM-confirmed fact): its renderer
-  treats the right block as reading the *same* per-column storage as the left block but
-  from an independent, otherwise-hidden set of pages/rows of that storage — genuinely
-  separate, individually-addressable pixels, not a duplicate. A real HD61102's per-column
-  storage is commonly taller than the visible window (a "display start line" register
-  selects which window is shown), which would make room for exactly this without needing
-  a 92nd physical output pin — but the TRM diagram's own `Y1–Y66` wording doesn't itself
-  spell this mechanism out, so exactly how that number reconciles with an
-  independently-addressable right block is still open, flagged here rather than resolved
-  by the diagram alone.
+- **Right 28-dot block** (columns 128–155): driven by `Y1–Y28`. IC2's label in the
+  diagram reads `Y1–Y66`. The right block shares physical segment pins with the left
+  block's first 28 columns, but it is **not** a duplicate of them. At 1/64 duty every
+  HD61102 scans all 64 of its RAM lines, one per HD61203 common (datasheets, §9.4). The
+  right block sits on commons `X33–X64`, so its 28 columns show RAM lines 32–63
+  (pages 4–7) of IC2. The left block shows lines 0–31 (pages 0–3) of the same outputs on
+  `X1–X32`. The right block's pixels are therefore separate and individually
+  addressable, and no chip needs extra output pins.
 
 Row (common) driving: **1 × HD61203** supplies the panel's X (common) outputs — `X1–X32`
 into the left block, `X1–X32` into the centre block (IC3's own, a second/independent
@@ -221,14 +215,13 @@ lit by either underlying cause; the "ローマ字→カナ" caption text this pr
 photo measurement (§1.1) found next to it is most likely a static, permanently-printed
 explanation of what S means when lit, not a second independently-driven segment.
 
-**Storage location, cross-checked (not itself a TRM fact) against PockEmul's own
-`Lcdc_pc1600.cpp`** (`disp_symb()`/`SYMB1_1600..3_1600`, an emulator cross-check per this
-repo's own "Sources & validation" convention): these three bytes live in the *centre*
-HD61102 (the one covering screen columns 64–127, §2's "IC3")'s own column 63, at pages
-4 (B=02H), 6 (B=01H), and 7 (B=00H) — the SAME per-column storage §2/§4 already describe
-for the graphics area, just parked at one fixed column past the visible 32-row window's
-own pages 0–3. PockEmul's own indexing (`symbSL()`) also rotates this by the controller's
-`displaySL` register, the same rotation that governs the main screen's own scroll (§3).
+**Storage location** (from the TRM wiring plus the datasheet scan rule, §9.4): the
+status row is fed by one IC3 segment line (`Y6f`) on commons X49–X64. That places
+16 symbol bits in **IC3 pages 6 and 7** of a single column, the same RAM that holds
+graphics pages 0–3. The exact column (63 if `Y6f` = Y64 with ADC = H) and the split
+of B=00H/01H between pages 7 and 6 are not yet confirmed from a primary source. Where
+B=02H (S, CTRL, BATT) is stored is also open (§9.4). The display start line rotates these
+bits along with the main screen (§9.4).
 
 ### 6.4 Graphics
 
@@ -303,6 +296,159 @@ list.)
   3. **codes 00H–1FH** — no ROM table. To use them the user builds a RAM table, sets
      **CTRCGA/CTRCGB**, and sets **LCDWK1 bit 3 = 1**.
 
+## 9. Controller datasheet facts (Hitachi HD61102 / HD61203, 1989)
+
+**Sources:** Hitachi *HD61102 Dot Matrix LCD Graphic Display Column Driver* (data book
+pp. 261–290) and *HD61203 Dot Matrix LCD Graphic Display Common Driver* (pp. 361–387),
+scans at `~/SynologyDrive/Dokumente/PDF/Vintage/Sharp/PC-1600/Hitachi_HD61102_1989.pdf`
+and `…/Hitachi_HD61203_1989.pdf`. The HD61102 sheet names the **HD61103A** as its common
+driver. The HD61203 sheet names the **HD61202** as its column driver. Both use the same
+FRM/CL/M/φ1/φ2 interface, and the PC-1600 uses the HD61102 + HD61203 pair (§2). Anything
+marked *inferred* combines a datasheet fact with the PC-1600 wiring. The datasheets do not
+state it directly.
+
+### 9.1 HD61102 register selection
+
+The chip is selected only when **CS1 = L, CS2 = L, CS3 = H** (active levels as §3 already
+lists them). D/I and R/W then pick one of four operations (datasheet Table 1):
+
+| D/I | R/W | Operation | PC-1600 port offset (§3) |
+|---|---|---|---|
+| 0 | 0 | write instruction | +0 (ROM-trace confirmed) |
+| 0 | 1 | read status | +1 (ROM-trace confirmed) |
+| 1 | 0 | write display data | +2 (ROM-trace confirmed) |
+| 1 | 1 | read display data | +3 (*inferred*: it is the only operation left) |
+
+This matches D/I following port-address bit 1 and R/W following bit 0 or the Z-80's
+read/write direction. The datasheet makes the §3 "+3 = data read" guess the only
+consistent choice. The ROM trace still has not exercised it.
+
+On a write, data is latched at the **falling edge of E**. On a read, data is driven while
+E = H. RST and ADC act whether or not the chip is selected.
+
+**Inferred:** a *read* from the "both controllers" block (50H–53H) would make IC2 and IC3
+drive DB0–7 at the same time. Only writes (broadcast instructions such as the ROM's first
+`3EH` display-off) make sense there.
+
+### 9.2 Instruction set (datasheet Table 2)
+
+| Instruction | Code (D/I=0, R/W=0) | Effect |
+|---|---|---|
+| Display ON/OFF | `0011111D` = **3EH / 3FH** | D=1 on, D=0 off. RAM and registers are unchanged. |
+| Display start line | `11AAAAAA` = **C0H–FFH** | Sets the RAM line (0–63) shown on the top common line (COM1). Used for scrolling. |
+| Set page (X address) | `10111AAA` = **B8H–BFH** | Page 0–7. The X counter does **not** auto-increment. |
+| Set Y address | `01AAAAAA` = **40H–7FH** | Column 0–63. Auto-increments after each data read or write and wraps 63 → 0. |
+
+Hitachi's naming is the reverse of the screen's: **"X" = page (vertical, 8-dot bands)**
+and **"Y" = column**. The address counter is 9 bits: 3 page bits and 6 column bits.
+512 bytes = 64 columns × 8 pages.
+
+**Status byte** (D/I=0, R/W=1):
+
+| Bit | Meaning |
+|---|---|
+| DB7 | **BUSY**: 1 = executing, and only Status Read is accepted |
+| DB6 | 0 |
+| DB5 | **ON/OFF**: 1 = display **off**, 0 = on (reverse of the instruction's D bit) |
+| DB4 | **RESET**: 1 = still initialising after RST |
+| DB3–DB0 | 0 |
+
+The ROM's busy-wait at `IN A,(55H)` / `IN A,(59H)` is this read. The datasheet says to
+wait for DB7 = 0 before every instruction, and for DB4 = 0 as well after a reset.
+
+**Busy time:** 1/f_CLK ≤ T_BUSY ≤ 3/f_CLK, where f_CLK is the φ1/φ2 frequency.
+
+### 9.3 Read pipeline: one dummy read after setting an address
+
+A data read returns the **output register**. The RAM cell at the current address is
+latched into that register at the falling edge of E, and then Y increments. After a
+Set-page or Set-Y instruction, the **first data read returns stale data**. The byte at
+the new address arrives on the *second* read (datasheet Fig. 5: set address → dummy read
+→ data N → data N+1 …). An emulator of offset +3 must model this, and ROM code like
+`DOTREAD`/`GPTNREAD` should contain a discarded read. Writes need no dummy access.
+
+### 9.4 Display scan, duty and why the right block works (HD61203)
+
+- The HD61203 has **64 common outputs X1–X64** and an internal timing generator. In
+  **master mode** (M/S = Vcc) it supplies **φ1, φ2, FRM, CL (via CL2) and M** to the
+  column drivers. The HD61102 has no timing source of its own, so this must be the
+  PC-1600's mode (*inferred*).
+- Duty is set by pins DS1/DS2: 1/48 (L,L), **1/64 (L,H)**, 1/96 (H,L), 1/128 (H,H). The
+  TRM's 1/64 duty (§1) is **DS1 = GND, DS2 = Vcc**, so there is one HD61203 and all 64
+  commons are in use.
+- At 1/64 duty each HD61102's 6-bit **Z counter** steps through RAM lines 0–63, one per
+  common. FRM reloads it from the display-start-line register. Common X*n* therefore shows
+  RAM line (start + *n* − 1) mod 64 on every segment output.
+- **Consequence for §2** (*inferred* from the scan rule plus the TRM block diagram): with
+  start line 0, commons X1–X32 show lines 0–31 (pages 0–3) and X33–X64 show lines 32–63
+  (pages 4–7). The right 28-dot block is wired to X33–X64 and to 28 of IC2's segment
+  outputs. So it displays **pages 4–7 of 28 IC2 columns**. These are separate RAM bits
+  from the left block's pages 0–3, on shared physical Y pins. That removes the need for
+  92 outputs on one chip, which the `Y1–Y66` label seemed to imply. Which 28 of IC2's 64
+  column addresses are used depends on its ADC pin (§9.5), which the TRM does not give.
+- The same rule places the status symbols. Commons X49–X64 are RAM lines 48–63, which is
+  **pages 6 and 7 = 16 bits of one column** on the segment line that feeds the status row
+  (IC3, the TRM's `Y6f`, probably Y64). That is exactly the "16 symbols" of §1.
+  **Open:** SMBLSET takes *three* bytes (§6.3) holding 13 + 3 = 16 used bits, but only
+  16 physical bit positions exist on X49–X64. B=00H and B=01H leave exactly 3 bits
+  unused (B=00H b2; B=01H b7 and b3), so the ROM may pack B=02H's S/CTRL/BATT into those
+  free positions rather than storing a third page. This has not been checked against the
+  ROM's SMBLSET code at 013CH.
+- **Start line moves everything together.** A non-zero start line rotates the whole
+  64-line scan, including the status symbols and the right block. The ROM sets start
+  line 0 (`C0H`, §3).
+
+### 9.5 ADC pin (column direction)
+
+The ADC pin is tied to Vcc or GND and must never change while running (changing it
+corrupts registers and RAM).
+
+- **ADC = H:** Y address 0 → pin Y1, 63 → Y64.
+- **ADC = L:** Y address 0 → pin Y64, 63 → Y1.
+
+The TRM does not show IC2's or IC3's ADC level. §4's "column = x within its block"
+assumes ADC = H on both.
+
+### 9.6 Reset
+
+RST = L sets **display OFF** and **start line 0**. While RST is low only Status Read is
+accepted. According to the datasheet, a reset *during operation* may destroy all RAM and
+registers except the ON/OFF register. That fits the TRM's VGG note (§1): the HD61102s
+stay powered and keep their RAM across auto-power-off, so they must not be reset on
+wake-up.
+
+### 9.7 Clocking and timing
+
+- **HD61203 oscillator:** fosc = 2 × f(φ1/φ2). For a **70 Hz frame** the sheet gives
+  fosc = **430 kHz** or **215 kHz**, selected by the FS pin. (The printed text says
+  "FCS" in the FS row, apparently a typo.) An external clock goes into **CR** with R and C
+  left open (range 50–600 kHz, duty 45–55 %).
+- **PC-1600** (*inferred*): CK0 = **217 kHz** (§1) is the 215 kHz case fed as an external
+  clock, so FS = GND. That gives **φ1/φ2 ≈ 108.5 kHz** and a frame rate of about
+  **70 Hz**. It is inside the HD61102's φ limits (cycle 2.5–20 µs; 108.5 kHz ≈ 9.2 µs).
+  It follows that the HD61102s get **no clock while port 37H bit 4 = 0**, so busy never
+  clears and the display does not refresh. The boot ROM must enable CK0 before it
+  polls busy.
+- **HD61102 busy time** at 108.5 kHz is about **9.2–27.6 µs** per instruction or data
+  access (*inferred* from §9.2's formula).
+- **MPU bus (HD61102):** E cycle ≥ 1000 ns, E high ≥ 450 ns, E low ≥ 450 ns, address
+  setup ≥ 140 ns, write data setup ≥ 200 ns, read data delay ≤ 320 ns. These are the
+  limits the SC-7852's delayed `E` strobe (§3) has to meet.
+
+### 9.8 Power (for context)
+
+| | HD61102 | HD61203 |
+|---|---|---|
+| Logic VCC | 5 V ± 10 % | 5 V ± 10 % |
+| VEE | 0 to −10 V; LCD drive span ≤ 15.5 V | VCC − VEE = 8–17 V |
+| Drive levels | V1/V2 select, V3/V4 non-select | V1/V2 select, V5/V6 non-select |
+| Power | ≤ 2 mW, ≤ 100 µA at 1/64 duty with φ = 250 kHz | ≈ 5 mW |
+
+The PC-1600's VEE of about −8.5 V gives VCC − VEE ≈ 13.5 V, inside both ranges. The
+contrast control sets the V1…V6 bias resistor chain; for 1/9 bias the sheet uses
+4R1 + R2 : R1 = 9 : 1 (e.g. R1 = 3 kΩ, R2 = 15 kΩ). The PC-1600's actual values are not
+known.
+
 ## TODO
 
 - ~~SMBLSET's per-symbol-set bit map~~ — resolved 2026-08-30 from the TRM's own SMBLSET
@@ -312,13 +458,15 @@ list.)
 - §3's command/data/status port split (offset 0/1/2 confirmed by ROM trace, 2026-08-30)
   still has one open cell: offset 3 (data *read*) was never exercised by the boot path
   traced so far — needs its own trace exercising `DOTREAD`/`GPTNREAD` or similar to
-  confirm directly rather than by symmetry.
-- ~~§2's three-column-block (64+64+28) sizes~~ — resolved 2026-08-30 from the TRM's own
-  LCD block diagram, see §2 above. The right block's exact internal wiring is only
-  partly resolved by that diagram, though: it behaves as independently-addressable pixels
-  (confirmed against PockEmul's own working renderer, an emulator cross-check, not a TRM
-  fact) rather than a duplicate of the left block, but the diagram's own `Y1-Y66` label
-  doesn't itself explain the mechanism -- still open, see §2's own note.
+  confirm directly rather than by symmetry. The datasheet (§9.1) leaves data-read as the
+  only unassigned operation, and §9.3 predicts a dummy read after each address set. A
+  trace should show both.
+- Status-line RAM mapping: which column, and how SMBLSET's three bytes land in the
+  16 bits of pages 6–7. Read the SMBLSET code at 013CH (§9.4 "Open").
+- IC2/IC3 ADC pin levels, and which 28 IC2 column addresses feed the right block (§9.5).
+- ~~§2's three-column-block (64+64+28) sizes and the right block's wiring~~ — sizes
+  from the TRM block diagram (2026-08-30). The right block is IC2 pages 4–7 on commons
+  X33–X64, from the datasheets' 1/64-duty scan (2026-09-26, §9.4).
 - The status-symbol line's Y6f/X49-X64 wiring (§2 above) is now confirmed as physically
   separate from the main screen, but its *software* side — which port/value actually
   drives Y6f or selects X49-X64 — is not given by the block diagram and remains open;
