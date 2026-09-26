@@ -128,7 +128,7 @@ offset 1/3, never a read of offset 0/2. So:
 | +0 | write | command |
 | +1 | read | status |
 | +2 | write | data |
-| +3 | read | data (not yet directly observed in this trace — offset 1/read status is the only read this trace's boot path exercised; offset 3 is inferred by the write side's own +0/+2 symmetry, not independently confirmed) |
+| +3 | read | data (not in the boot trace, but confirmed from ROM code: bank 6 `81E8H`/`8AA2H` read with `IN r,(C)` at C = 57H/5BH, §9.3) |
 
 Within the command register, three command-byte ranges were directly observed being
 written by the real ROM and, once decoded this way, produced a genuinely-lit real pixel
@@ -215,13 +215,16 @@ lit by either underlying cause; the "ローマ字→カナ" caption text this pr
 photo measurement (§1.1) found next to it is most likely a static, permanently-printed
 explanation of what S means when lit, not a second independently-driven segment.
 
-**Storage location** (from the TRM wiring plus the datasheet scan rule, §9.4): the
-status row is fed by one IC3 segment line (`Y6f`) on commons X49–X64. That places
-16 symbol bits in **IC3 pages 6 and 7** of a single column, the same RAM that holds
-graphics pages 0–3. The exact column (63 if `Y6f` = Y64 with ADC = H) and the split
-of B=00H/01H between pages 7 and 6 are not yet confirmed from a primary source. Where
-B=02H (S, CTRL, BATT) is stored is also open (§9.4). The display start line rotates these
-bits along with the main screen (§9.4).
+**Storage location, confirmed from ROM code (2026-09-26).** The symbol writer in
+bank 6 (`8220H`, called with the page in A, e.g. `LD A,07H / CALL 8220H` at `82FCH`)
+selects IC3 (C = 54H) and sets page **(A + DSPLPTR F05CH) & 7** (`81F0H`: `OR B8H`).
+It sets column **3FH = 63** (`81FCH`: `OR 40H`) and writes the byte with `OUT (56H),A`,
+waiting on both chips' busy bits (`817FH`) before each access. So the three sets live in
+**IC3 column 63: B=00H → page 7, B=01H → page 6, B=02H → page 4**. Page 5 is unused.
+The display start line rotates them along with the main screen. For page 4 the writer
+folds KBII into S (`AND 77H`, then `OR 08H` if bit 3 or 7 was set) before the write.
+The RAM shadows, read back by `8208H`, are **F64EH** (page 7), **F64FH** (page 6) and
+**F3C6H** (page 4, pre-fold, so it still carries KBII in b7).
 
 ### 6.4 Graphics
 
@@ -320,8 +323,8 @@ lists them). D/I and R/W then pick one of four operations (datasheet Table 1):
 | 1 | 1 | read display data | +3 (*inferred*: it is the only operation left) |
 
 This matches D/I following port-address bit 1 and R/W following bit 0 or the Z-80's
-read/write direction. The datasheet makes the §3 "+3 = data read" guess the only
-consistent choice. The ROM trace still has not exercised it.
+read/write direction. The datasheet makes +3 = data read the only consistent choice,
+and ROM code confirms it (bank 6 `81E8H`/`8AA2H` read 57H/5BH, §9.3).
 
 On a write, data is latched at the **falling edge of E**. On a read, data is driven while
 E = H. RST and ADC act whether or not the chip is selected.
@@ -354,7 +357,10 @@ and **"Y" = column**. The address counter is 9 bits: 3 page bits and 6 column bi
 | DB3–DB0 | 0 |
 
 The ROM's busy-wait at `IN A,(55H)` / `IN A,(59H)` is this read. The datasheet says to
-wait for DB7 = 0 before every instruction, and for DB4 = 0 as well after a reset.
+wait for DB7 = 0 before every instruction, and for DB4 = 0 as well after a reset. The
+ROM tests **DB7 only**, on both chips in one loop (bank 0 `0807H`, bank 6 `817FH`):
+`IN A,(59H) / RLA / IN A,(55H) / RRA / AND C0H / JP NZ,loop`. DB5 and DB4 are never
+looked at.
 
 **Busy time:** 1/f_CLK ≤ T_BUSY ≤ 3/f_CLK, where f_CLK is the φ1/φ2 frequency.
 
@@ -364,8 +370,14 @@ A data read returns the **output register**. The RAM cell at the current address
 latched into that register at the falling edge of E, and then Y increments. After a
 Set-page or Set-Y instruction, the **first data read returns stale data**. The byte at
 the new address arrives on the *second* read (datasheet Fig. 5: set address → dummy read
-→ data N → data N+1 …). An emulator of offset +3 must model this, and ROM code like
-`DOTREAD`/`GPTNREAD` should contain a discarded read. Writes need no dummy access.
+→ data N → data N+1 …). An emulator of offset +3 must model this. Writes need no dummy
+access.
+
+**ROM confirmation:** bank 6 `81E8H` is `PUSH AF / CALL 817FH (busy-wait) / IN A,(C) /
+POP AF / RET`, a busy-wait plus a discarded read. The block reader at `8AA2H` calls it
+and then reads four bytes (`IN E/D/L/H,(C)`) with a busy-wait before each one. The
+scroll/copy routines at `8A2CH` (IC2, C = 5BH) and `8A66H` (IC3, C = 57H) read four bytes
+that way and write them back one page further on (`8ABAH`).
 
 ### 9.4 Display scan, duty and why the right block works (HD61203)
 
@@ -389,11 +401,11 @@ the new address arrives on the *second* read (datasheet Fig. 5: set address → 
 - The same rule places the status symbols. Commons X49–X64 are RAM lines 48–63, which is
   **pages 6 and 7 = 16 bits of one column** on the segment line that feeds the status row
   (IC3, the TRM's `Y6f`, probably Y64). That is exactly the "16 symbols" of §1.
-  **Open:** SMBLSET takes *three* bytes (§6.3) holding 13 + 3 = 16 used bits, but only
-  16 physical bit positions exist on X49–X64. B=00H and B=01H leave exactly 3 bits
-  unused (B=00H b2; B=01H b7 and b3), so the ROM may pack B=02H's S/CTRL/BATT into those
-  free positions rather than storing a third page. This has not been checked against the
-  ROM's SMBLSET code at 013CH.
+  **Resolved from ROM code (§6.3):** the ROM does not pack. B=02H is a third byte, at
+  **page 4** of the same column 63. Page 4 is RAM lines 32–39, i.e. commons X33–X40, not
+  X49–X64. So the status row's segment line is also driven on at least X33–X40, and the
+  TRM diagram's "X49–X64 into the status row" is incomplete. The emulator, reading these
+  three pages, lights S/CTRL/BATT correctly, which fits this.
 - **Start line moves everything together.** A non-zero start line rotates the whole
   64-line scan, including the status symbols and the right block. The ROM sets start
   line 0 (`C0H`, §3).
@@ -455,14 +467,12 @@ known.
   page (§3.1 p28), see §6.3 above.
 - The character-*code* table (glyph assignments) — TRM §10.1. **Not needed by an emulator** (the ROM's own font tables, §8, do the rendering); useful for the program-writing agent.
 - Reconcile the `LINE`/`BOX` entry-address vs. the §3.1 example's `CALL &0124`.
-- §3's command/data/status port split (offset 0/1/2 confirmed by ROM trace, 2026-08-30)
-  still has one open cell: offset 3 (data *read*) was never exercised by the boot path
-  traced so far — needs its own trace exercising `DOTREAD`/`GPTNREAD` or similar to
-  confirm directly rather than by symmetry. The datasheet (§9.1) leaves data-read as the
-  only unassigned operation, and §9.3 predicts a dummy read after each address set. A
-  trace should show both.
-- Status-line RAM mapping: which column, and how SMBLSET's three bytes land in the
-  16 bits of pages 6–7. Read the SMBLSET code at 013CH (§9.4 "Open").
+- ~~§3's offset 3 (data read)~~ — confirmed 2026-09-26 from ROM code: bank 6
+  `81E8H` (busy-wait + discarded dummy read) and `8AA2H` (four reads) at C = 57H/5BH
+  (§9.3).
+- ~~Status-line RAM mapping~~ — resolved 2026-09-26 from the ROM's symbol writer
+  (bank 6 `8220H`): IC3 column 63, pages 7/6/4 + DSPLPTR (§6.3, §9.4). Still open: how
+  commons X33–X40 physically reach the status row.
 - IC2/IC3 ADC pin levels, and which 28 IC2 column addresses feed the right block (§9.5).
 - ~~§2's three-column-block (64+64+28) sizes and the right block's wiring~~ — sizes
   from the TRM block diagram (2026-08-30). The right block is IC2 pages 4–7 on commons
