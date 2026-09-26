@@ -115,9 +115,26 @@ yields these machine-language program areas:
 Two things worth noting:
 
 - **CE-159's program area starts at A0C5H, not 80C5H** — i.e. this particular Slot-1 module's own address window begins at &A000, not &8000 (a half-size, 8KB-class module footprint, distinct from a full 16KB Slot 1a/1b pairing). This is module-specific, not a general Slot-1 property — `PC-1600-Memory-Bank-Switching.md`'s own bank table shows Slot 1a/1b spanning the full 8000–BFFF across banks 0/1 for a full-size module.
-- **CE-1600M's program area spans two banks** (Bank 2's 80C5H–BFFFH, continuing into Bank 3's 8000H–8FFFH with no further +C5H offset, since it's a continuation of the same allocation, not a new base) — directly confirming that a &5000-byte (~20KB) `NEW` allocation on a 32KB module can straddle the Slot 2a/Slot 2b bank boundary transparently from BASIC's perspective, exactly as the underlying two-bank Slot 2 hardware (`PC-1600-Memory-Bank-Switching.md` Part 1) would predict.
+- **CE-1600M's program area spans two banks** (Bank 2's 80C5H–BFFFH, continuing into Bank 3's 8000H–8FFFH with no further +C5H offset, since it's a continuation of the same allocation, not a new base) — a &5000-byte (~20KB) `NEW` allocation on a 32KB module covers both of that module's banks. It is continuous only in the area's *logical* addresses; to the CPU the two parts are separate pages at the same 8000–BFFF window (§4.0).
 
 This C5H-offset convention is identical in spirit to the PC-1500/1500A's own module-`NEW`-offset practice (`PC-1500-Address-Decoding.md` §5.4, §5.5) — allocate the fixed reserve first, then give BASIC/ML the rest — just generalized here to name which of three physical targets (S0/S1/S2) the reserve applies to, since the PC-1600 (unlike the PC-1500/1500A) has two independent module slots plus internal RAM, all needing this same bookkeeping simultaneously.
+
+### 4.0 One `NEW` = one module, at most two banks (S0 excepted)
+
+**Slot vs. bank.** A *slot* is a physical module connector; a *bank* is a 16 KB page selected into the 8000–BFFF window (Port 31H page-2 field). A 32 KB module fills **two banks behind the same window** — Slot 1: banks 0 + 1; Slot 2: banks 2 + 3 (for a vertical-banked module, of the selected vertical bank). A module ≤ 16 KB is a single bank.
+
+**`NEW "S1:"` / `NEW "S2:"` allocate inside exactly one physical module** — the program module in that slot (Operation Manual p.233: *"S1: is the program module currently in slot 1"*). The ML area starts at that module's base + C5H and can never run past the end of that module. **Within the module it may cover both banks** — that is what the TRM's `NEW "S2:",&5000` does (bank 2 → bank 3).
+
+**S0 is the exception.** S0 is internal RAM *plus* any module RAM merged in as expansion memory (TRM §3.12.1), and its header + reserve sit at the start of the merged user area (§4b.3(b)). So a `NEW "S0:"` allocation counts from there and — if large enough — runs from a module on into internal RAM, or across both modules, in `ADTBL` order (§4b.5). This follows from the manual's area-relative addressing and the moved header; the TRM's only `NEW "S0:"` example uses program modules, where S0 is internal RAM alone (C0C5H…), so it is not yet confirmed by example or test.
+
+**Logical vs. CPU addresses.** `NEW`'s `<address>` is a **logical, area-relative** address (*"relative addresses from the top of memory (0)"*, lower bound 197, upper bound 65535 — Operation Manual p.233–234). The firmware maps each area's logical space onto its bank list (`ADTBL`; ROM `LOGADR` 02D7H converts logical → physical + bank). An allocation is therefore always continuous *logically*, but only partly continuous *to the CPU*:
+
+| Allocation crosses… | CPU-contiguous? | Why |
+|---|---|---|
+| bank → bank of the **same** module (e.g. bank 2 → bank 3) | **No** | both banks sit at 8000–BFFF; only one is mapped at a time — after BFFF the CPU sees C000 (internal RAM), not the next bank |
+| module (page 2) → internal RAM (page 3), S0 only | **Yes**, while page 2 holds that bank | e.g. CE-155 at A000–BFFF followed by internal C000–EFFF; top-justification (§4b.2) makes BFFF→C000 seamless |
+
+So the largest block an ML program can address straight through inside a module is **one bank**: 80C5–BFFF = **16 187 bytes** in the module's leading bank, 16 384 in a following bank. Code bigger than that must be split per bank and cross over with `BANKCALL` (019FH) / `RST 20H` / `RST 18H`, or keep its code in one bank and switch Port 31H to reach data in the other (with `DI`/`EI` around the access — `PC-1600-Memory-Bank-Switching.md` Part 4).
 
 ### 4.1 Program areas, `TITLE`, and what each `NEW` form clears
 
@@ -270,7 +287,7 @@ NEW "S2:",&5000     → ML area  80C5H–BFFFH (bank2) + 8000H–8FFFH (bank3, n
 NEW "S0:",&1000     → ML area  C0C5H–CFFFH        (internal, bank 0)  — BASIC text in internal RAM starts D000H
 ```
 
-Three independent fixed ML blocks (one per base + C5H); the BASIC program/variable area occupies every user byte *not* in one of them — literally sliding "around" all three. Note `NEW "S2:",&5000` (≈ 20 KB) straddles the C/D bank boundary transparently: `80C5–BFFF` in bank 2, continuing at `8000–8FFF` in bank 3 with **no** second reserve, because it is one allocation, not a new base (§4).
+Three independent fixed ML blocks (one per base + C5H); the BASIC program/variable area occupies every user byte *not* in one of them — literally sliding "around" all three. Note `NEW "S2:",&5000` (≈ 20 KB) covers both banks of the one Slot 2 module: `80C5–BFFF` in bank 2, continuing at `8000–8FFF` in bank 3 with **no** second reserve, because it is one allocation, not a new base. It is continuous in logical addresses only — the CPU sees the two parts one at a time at 8000–BFFF (§4.0).
 
 ### 4b.5 The load order (TRM §3.12.2 "Work Area used for Memory")
 
@@ -313,17 +330,19 @@ Two genuine CE-1600Ms (32 KB each, flat, two-bank, no vertical banking) + the in
 
 **This is the ceiling.** Both slot contributions are already at their architectural cap (Slot 1: only Bank 0 + Bank 1 exist for its window; Slot 2: only vertical bank 0 can be S0 expansion memory — and a CE-1600M *is* exactly one 32 KB vertical bank). A CE-1601M / CE-1650M / *superRAM* in Slot 2 keeps `MEM` at this same figure and adds its extra vertical banks **only as RAM-disk space** (`PC-1600-Memory-Bank-Switching.md` Part 2, "Why Slot 1 and Slot 2 contribute so differently"). The one untapped reserve anywhere is Bank 7 ("addressable but unused", §2) — no module uses it.
 
-**Machine-language areas in this configuration.** `NEW "S0:"`, `NEW "S1:"` and `NEW "S2:"` are three independent targets that **accumulate** — issuing them in sequence leaves all three ML areas reserved; only the BASIC program text is cleared by each `NEW` (TRM §2.2's own example does exactly this; confirmed on real hardware — the ML contents survive, §4.1). Each carves `[base]+C5H … [base]+<expr>−1` from the bottom of its region (`<expr>` = program size + `&C5` = size + 197):
+**Machine-language areas in this configuration.** With both CE-1600Ms merged as expansion memory there are no program modules, so **`NEW "S0:"` is the only ML target** — `NEW "S1:"`/`"S2:"` name *the program module* in that slot (Operation Manual p.233), and `TITLE "S1:"`/`"S2:"` gives ERROR 101 in this state (real hardware, §4.1). Per §4.0, the S0 header + reserve sit at the start of the merged area, so `NEW "S0:",<expr>` carves its ML block from `80C5H` in bank 0 (Slot 1, loc A) and, if larger, continues in `ADTBL` order (§4b.5) — logically continuous, but CPU-contiguous only within one bank (≤ 16 187 bytes in bank 0). That starting point is inferred, not yet tested.
 
-| `NEW` | Base | ML area | Max one contiguous block |
-|---|---|---|---|
-| `NEW "S1:",<expr>` | 8000H | 80C5H → Bank 0's 8000–BFFF, then Bank 1's 8000–BFFF | **32 571 bytes** (`<expr>` ≤ `&8000`) |
-| `NEW "S2:",<expr>` | 8000H | 80C5H → Bank 2, then Bank 3 (transparent across the C/D boundary) | **32 571 bytes** |
-| `NEW "S0:",<expr>` | C000H | C0C5H → internal RAM only (stops below the F000H work area) | **≈ 11.8 KB** |
+The three targets S0/S1/S2 only coexist when the modules are typed as **program modules** (then they don't count in `MEM`, §4a). They then **accumulate** — issuing them in sequence leaves all three ML areas reserved; only the BASIC program text is cleared by each `NEW` (TRM §2.2's own example does exactly this; confirmed on real hardware — the ML contents survive, §4.1). Each carves `[base]+C5H … [base]+<expr>−1` from the bottom of its own module (`<expr>` = program size + `&C5` = size + 197):
 
-So one contiguous ML program is capped at **≈ 32.5 KB** (a full slot); reserving all three regions yields ≈ 77 KB of ML area total, i.e. almost all of `MEM`. For a program larger than one slot, split it across regions and cross the bank boundary with `BANKCALL` (019FH) / `RST 20H` / `BANKCALL2` (0020H).
+| `NEW` (program modules) | Base | ML area — one module only | Max allocation (logical) | Largest CPU-contiguous piece |
+|---|---|---|---|---|
+| `NEW "S1:",<expr>` | 8000H | 80C5H → bank 0, then bank 1 (same module) | 32 571 bytes (`<expr>` ≤ `&8000`) | 16 187 bytes (bank 0) |
+| `NEW "S2:",<expr>` | 8000H | 80C5H → bank 2, then bank 3 (same module) | 32 571 bytes | 16 187 bytes (bank 2) |
+| `NEW "S0:",<expr>` | C000H | C0C5H → internal RAM only (stops below the F000H work area) | ≈ 11.8 KB | ≈ 11.8 KB |
 
-**Two programs in two slots** — the intended use of the multi-target form:
+So a single ML allocation never spans more than one module (S0 aside, §4.0), and an ML program addresses at most one bank straight through. For anything larger, split the code per bank and cross with `BANKCALL` (019FH) / `RST 20H` / `BANKCALL2` (0020H).
+
+**Two programs in two slots** — the intended use of the multi-target form (both modules typed as program modules):
 
 ```
 NEW "S1:",&<sizeA+C5>          ' area A at 80C5H, Bank 0/1
@@ -335,14 +354,14 @@ CALL #2,&80C5 [,var]           ' run B
 
 All of this is **SC-7852 (Z-80)** code (`CALL` / `PEEK` / `POKE` / `BLOAD` / `CLOADM`); the LH-5803 side is the separate `XCALL` / `XPEEK` / `XPOKE` path with its own address map (§5–§6).
 
-**Effect on the BASIC area — it flows around the reservations; a slot is never lost.** The German TRM §2.2 puts it directly: `NEW` reserves the ML space "*and thereby simultaneously specifies the lower address of the BASIC program area*". Every byte of the ≈ 77 KB user area not inside an ML block stays BASIC-program / variable space; the interpreter tracks the scattered bank order in `ADTBL` (§4b.5) and treats it as one stream. Reserve 8 KB in Slot 1 and the other 24 KB of that slot is still BASIC space. Rule of thumb:
+**Effect on the BASIC area — it flows around the reservations; a slot is never lost.** The German TRM §2.2 puts it directly: `NEW` reserves the ML space "*and thereby simultaneously specifies the lower address of the BASIC program area*". Every byte of the ≈ 77 KB user area not inside an ML block stays BASIC-program / variable space; the interpreter tracks the scattered bank order in `ADTBL` (§4b.5) and treats it as one stream. With both modules merged, reserve 8 KB via `NEW "S0:"` (landing in Slot 1's bank 0) and the other 24 KB of that slot is still BASIC space. Rule of thumb:
 
 ```
-MEM after reservations  ≈  77 370 − Σ <expr>        (over the regions you targeted;
-                                                     each <expr> already includes its 197-byte reserve)
+MEM after reservation  ≈  77 370 − <expr>          (<expr> of NEW "S0:"; it already
+                                                     includes the 197-byte reserve)
 ```
 
-Regions you never point `NEW` at cost nothing extra; targeting all three pays ≈ 3 × 197 B of reserve rather than one. With two CE-1600Ms there is **no** slot unavailable to BASIC — both are live expansion memory from reset. (A slot only goes dark if its module is typed as a file/program module, or — for a *vertical-banked* module such as the CE-1601M — until `INIT "S2:","M"` dedicates vertical bank 0; see §4b.3(d).)
+S0's 197-byte reserve is paid once either way; a program module carries its own 197 B, outside `MEM`. With two CE-1600Ms there is **no** slot unavailable to BASIC — both are live expansion memory from reset. (A slot only goes dark if its module is typed as a file/program module, or — for a *vertical-banked* module such as the CE-1601M — until `INIT "S2:","M"` dedicates vertical bank 0; see §4b.3(d).)
 
 ---
 
